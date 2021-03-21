@@ -3,3 +3,12 @@ negativeExamples/
 positiveExamples/
 outputChunks/
 output/
+train.csv
+valid.csv
+test.csv
+full.csv
+
+# External datasets
+GPD_proteome.csv
+GPD_proteome.faa
+GPD_proteome_orthology_assignment.txt
