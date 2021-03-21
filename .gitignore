@@ -12,3 +12,10 @@ full.csv
 GPD_proteome.csv
 GPD_proteome.faa
 GPD_proteome_orthology_assignment.txt
+
+# Logs
+tensorboard_logs/
+
+# IDE
+.vscode/
+__pycache__/
