@@ -144,7 +144,7 @@ def generateDataFrames(randomSeed):
 # ## Implement the model
 # ### Import necessary libraries
 
-# In[4]:
+# In[3]:
 
 
 import matplotlib.pyplot as plt
@@ -175,6 +175,12 @@ tensorboard_writer = SummaryWriter('./tensorboard_logs')
 
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_curve, auc, roc_auc_score
 import seaborn as sns
+
+# allegro trains integration
+    # automation modules for hyperparameter optimization
+from trains.automation import UniformParameterRange, UniformIntegerParameterRange
+from trains.automation import HyperParameterOptimizer
+from trains.automation.optuna import OptimizerOptuna
 
 
 # ### Load data
@@ -500,7 +506,7 @@ training_losses, validation_losses, global_steps = train(
     vocab=sequence.vocab, lr=0.0004, criterion=nn.SmoothL1Loss(), fields=fields, dataset=fullDataset, foldCount=10, config=config, file_path = destination_folder, num_epochs=config['number_of_epochs'], dimension=config['dimension'], batchSize=config['batch_size'], sequenceDepth=config['sequence_feature_depth'], dropoutWithinLayers = config['dropout_within_layers'], dropoutOutput = config['dropout_output'])
 
 
-# In[11]:
+# In[ ]:
 
 
 #### optimize hyperparameters
@@ -509,7 +515,7 @@ task = Task.create(project_name='agGRU',
                  task_name='agGRU-Check Hyperparameter optimization')
 
 optimizer = HyperParameterOptimizer(
-    base_task_id='045662b0ea7f4b9e95367cb055fa742f',  
+    base_task_id='b7f9f1701c7c4b38b09ab68391e03c23',  
     # setting the hyper-parameters to optimize
     hyper_parameters=[
         UniformIntegerParameterRange('number_of_epochs', min_value=2, max_value=100, step_size=2),
