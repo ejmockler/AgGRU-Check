@@ -10,7 +10,7 @@ task = Task.create(project_name='agGRU',
                 task_name='agGRU-Check Hyperparameter optimization')
 
 optimizer = HyperParameterOptimizer(
-    base_task_id='6f9b9d7b8211497e89804f692f2a1b12',  
+    base_task_id='f7c66251e33049999fc17ec0d8cacc32',  
     # setting the hyper-parameters to optimize
     hyper_parameters=[
         UniformIntegerParameterRange('number_of_epochs', min_value=2, max_value=20, step_size=2),
