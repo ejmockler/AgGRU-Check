@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import ConcatDataset
 import pandas as pd
 
-def generateDataFrames(randomSeed, positiveDataset, negativeDataset, train_test_ratio, train_validation_ratio):
+def generateDataFrames(randomSeed, positiveDataset, negativeDataset, train_test_ratio, train_validation_ratio, data_dir):
     # Read raw data & combine 
     df_positive = pd.read_csv(positiveDataset).applymap(lambda x: x.strip() if type(x)==str else x)
     df_negative = pd.read_csv(negativeDataset).applymap(lambda x: x.strip() if type(x)==str else x)
@@ -37,10 +37,10 @@ def generateDataFrames(randomSeed, positiveDataset, negativeDataset, train_test_
     df_full = pd.concat([df_train, df_test], ignore_index=True, sort=False)
 
     # Write preprocessed data
-    df_train.to_csv('train.csv', index=False)
-    df_test.to_csv('test.csv', index=False)
-    df_valid.to_csv('valid.csv', index=False)
-    df_full.to_csv('full.csv', index=False)
+    df_train.to_csv(data_dir + '/train.csv', index=False)
+    df_test.to_csv(data_dir + '/test.csv', index=False)
+    df_valid.to_csv(data_dir + '/valid.csv', index=False)
+    df_full.to_csv(data_dir + '/full.csv', index=False)
 
     return datasetIndex
 
@@ -71,7 +71,7 @@ def load_metrics(load_path, device):
 def split(sequence):
     return [char for char in sequence] 
 
-def declareFields():
+def declareFields(data_dir):
     header = Field(sequential=False, dtype=torch.int, use_vocab=False, include_lengths=False)
     sequence = Field(tokenize=split, sequential=True, include_lengths=True, batch_first=True)
     amyloidLabel = Field(sequential=False, use_vocab=False, batch_first=True, dtype=torch.float, include_lengths=False)
@@ -79,7 +79,7 @@ def declareFields():
 
     fields = [('header', header), ('sequence', sequence), ('prion', prionLabel), ('amyloid', amyloidLabel)]
     # Create TabularDatasets for vocab & fold splits
-    train, test = TabularDataset.splits(path="./", train="train.csv", test="test.csv", format='CSV', fields=fields, skip_header=True)
+    train, test = TabularDataset.splits(path=data_dir, train="train.csv", test="test.csv", format='CSV', fields=fields, skip_header=True)
     full = ConcatDataset([train, test])
 
     # Vocabulary
