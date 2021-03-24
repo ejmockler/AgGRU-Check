@@ -1,48 +1,28 @@
 # data 
 
+from typing import Sequence
+from torchtext.legacy import data
 from torchtext.legacy.data import Field, TabularDataset, BucketIterator
 from sklearn.model_selection import train_test_split
 import torch
-from torch.utils.data import ConcatDataset
 import pandas as pd
+from model import GRU
+from torch.utils.data import ConcatDataset
 
-def generateDataFrames(randomSeed, positiveDataset, negativeDataset, train_test_ratio, train_validation_ratio, data_dir):
-    # Read raw data & combine 
-    df_positive = pd.read_csv(positiveDataset).applymap(lambda x: x.strip() if type(x)==str else x)
-    df_negative = pd.read_csv(negativeDataset).applymap(lambda x: x.strip() if type(x)==str else x)
-    df_full = pd.concat([df_positive, df_negative], ignore_index=True)
 
-    # Generate in-memory index for headers & compress dataframe
-    datasetIndex = {}
-    for index in range(len(df_full.index)):
-        datasetIndex[index] = df_full.at[index, 'header']
-        df_full.at[index, 'header'] = index
+# evaluation
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_curve, auc, roc_auc_score
+import seaborn as sns
 
-    # Split amyloid class
-    df_notAmyloid = df_full[df_full['amyloid'] == 0]
-    df_amyloid = df_full[df_full['amyloid'] == 1]
+# set processing device
+device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+plaacFasta = 'positiveExamples/yeastPrion.fasta'
+negativeFasta = 'negativeExamples/negative.fasta'
+positiveDataset = 'positiveExamples/positiveDataset.csv'
+negativeDataset = 'negativeExamples/negativeDataset.csv'
+destination_folder = "./output"
 
-    # Train-validation split
-    df_amyloid_trainSuperset, df_amyloid_validation = train_test_split(df_amyloid, train_size = train_validation_ratio, random_state = randomSeed)
-    df_notAmyloid_trainSuperset, df_notAmyloid_validation  = train_test_split(df_notAmyloid, train_size = train_validation_ratio, random_state = randomSeed)
-
-    # Train-test split
-    df_amyloid_train, df_amyloid_test = train_test_split(df_amyloid_trainSuperset, train_size = train_test_ratio, random_state = randomSeed)
-    df_notAmyloid_train, df_notAmyloid_test = train_test_split(df_notAmyloid_trainSuperset, train_size = train_test_ratio, random_state = randomSeed)
-
-    # Concatenate splits of different labels into training, testing & validation sets
-    df_train = pd.concat([df_amyloid_train, df_notAmyloid_train], ignore_index=True, sort=False)
-    df_test = pd.concat([df_amyloid_test, df_notAmyloid_test], ignore_index=True, sort=False)
-    df_valid = pd.concat([df_amyloid_validation, df_notAmyloid_validation], ignore_index=True, sort=False)
-    df_full = pd.concat([df_train, df_test], ignore_index=True, sort=False)
-
-    # Write preprocessed data
-    df_train.to_csv(data_dir + '/train.csv', index=False)
-    df_test.to_csv(data_dir + '/test.csv', index=False)
-    df_valid.to_csv(data_dir + '/valid.csv', index=False)
-    df_full.to_csv(data_dir + '/full.csv', index=False)
-
-    return datasetIndex
 
 def save_metrics(save_path, train_loss_list, valid_loss_list, global_steps_list):
 
@@ -71,19 +51,222 @@ def load_metrics(load_path, device):
 def split(sequence):
     return [char for char in sequence] 
 
-def declareFields(data_dir):
+def declareFields(train = False):
     header = Field(sequential=False, dtype=torch.int, use_vocab=False, include_lengths=False)
     sequence = Field(tokenize=split, sequential=True, include_lengths=True, batch_first=True)
-    amyloidLabel = Field(sequential=False, use_vocab=False, batch_first=True, dtype=torch.float, include_lengths=False)
-    prionLabel = Field(sequential=False, use_vocab=False, batch_first=True, dtype=torch.float, include_lengths=False)
+    fields = [('header', header), ('sequence', sequence)]
+    if train:
+        amyloidLabel = Field(sequential=False, use_vocab=False, batch_first=True, dtype=torch.float, include_lengths=False)
+        prionLabel = Field(sequential=False, use_vocab=False, batch_first=True, dtype=torch.float, include_lengths=False)
+        fields = [('header', header), ('sequence', sequence), ('prion', prionLabel), ('amyloid', amyloidLabel)]
 
-    fields = [('header', header), ('sequence', sequence), ('prion', prionLabel), ('amyloid', amyloidLabel)]
-    # Create TabularDatasets for vocab & fold splits
-    train, test = TabularDataset.splits(path=data_dir, train="train.csv", test="test.csv", format='CSV', fields=fields, skip_header=True)
-    full = ConcatDataset([train, test])
+    return fields, sequence
 
-    # Vocabulary
-    sequence.build_vocab(train)
-    print("Vocabulary: " + str(sequence.vocab.stoi.items()))
+def compressHeaders(FASTApath, CSVpath):
+    print("Converting to CSV...")
+    fastaToCSV(FASTApath, CSVpath)
 
-    return full, fields, sequence
+    print("Reading CSV as dataframe...")
+    df_realData = pd.read_csv(CSVpath, engine='python')
+
+    # Generate in-memory index for headers & compress dataframe
+    realDatasetIndex = {}
+    print("Generating header index...")
+    for index in range(len(df_realData.index)):
+        realDatasetIndex[index] = df_realData.at[index, 'header']
+        df_realData.at[index, 'header'] = index
+    print("Writing compressed CSV...")
+    df_realData.to_csv(CSVpath, index=False)
+    
+    return realDatasetIndex
+
+# def runModel(model, csvDatasetPath = None, threshold=.45):
+#     y_pred = []
+
+#     def evaluate(dataPath, y_pred):
+#         fields, sequence = declareFields()
+#         print(f"building iterator for {dataPath}... ")
+#         testData = TabularDataset(path=dataPath, format="CSV", fields=fields, skip_header=True)
+#         sequence.build_vocab(testData)
+#         test_iter =  BucketIterator(testData, batch_size=16, sort_key=lambda x: len(x.sequence),
+#                                 device=device, sort=True, sort_within_batch=True)
+#         with torch.no_grad():
+#             for (header, (sequence, sequence_len)), _ in test_iter:           
+#                 sequence = sequence.to(device)
+#                 sequence_len = sequence_len.to(device)
+#                 output = model(sequence, sequence_len.cpu())
+
+#                 output = (output > threshold).int()
+#                 y_pred.extend(output.tolist())
+
+#     model.eval()
+#     evaluate(csvDatasetPath, y_pred)
+            
+#     return y_pred
+
+def runModel(model, foldCount = 0, csvDatasetPath = None, csvFoldPathBase = None, threshold=.45):
+    y_pred = []
+    y_true = []
+
+    def evaluate(dataPath, y_pred, y_true):
+        fields, sequence = declareFields()
+        testData = TabularDataset(path=dataPath, format="CSV", fields=fields, skip_header=True)
+        sequence.build_vocab(testData)
+        test_iter =  BucketIterator(testData, batch_size=16, sort_key=lambda x: len(x.sequence),
+                                device=device, sort=True, sort_within_batch=True)
+        with torch.no_grad():
+            for (header, (sequence, sequence_len)), _ in test_iter:           
+                sequence = sequence.to(device)
+                sequence_len = sequence_len.to(device)
+                output = model(sequence, sequence_len.cpu())
+
+                output = (output > threshold).int()
+                y_pred.extend(output.tolist())
+
+    model.eval()
+    if csvFoldPathBase:
+        for fold in range(foldCount):
+            evaluate(csvFoldPathBase + str(fold) + ".csv", y_pred, y_true)
+    else:
+        evaluate(csvDatasetPath, y_pred, y_true)
+            
+    return y_pred, y_true
+
+def getHeuristics(y_true, y_pred, confusionMatrixTitle, ROCtitle, fold=None):
+    cm = confusion_matrix(y_true, y_pred, labels=[1,0], normalize='true')
+    ax= plt.subplot()
+    sns.heatmap(cm, annot=True, ax = ax, cmap='Blues')
+
+    ax.set_title(confusionMatrixTitle)
+    ax.set_xlabel('Predicted Labels')
+    ax.set_ylabel('True Labels')
+    ax.xaxis.set_ticklabels(['no', 'yes'])
+    ax.yaxis.set_ticklabels(['no', 'yes'])
+
+
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred, pos_label=1)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+            lw=lw, label=f'Receiver operating characteristic (area = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(ROCtitle)
+    plt.legend(loc="lower right")
+    plt.show()
+
+    print(f'Classification Report {fold + 1}:' if fold else 'Classification Report')
+    print(classification_report(y_true, y_pred, labels=[1,0], digits=4))
+    return roc_auc
+
+def fastaToCSV(fastaPath, csvPath, prionClassification = 0, amyloidClassification = 0):
+    # Read in FASTA
+    with open(fastaPath, 'r') as file:
+        lines = ["header,sequence,prion,amyloid"]
+        lines_i = file.readlines()
+
+        seq = ''
+        index = 0
+        while index < len(lines_i):
+            if lines_i[index][0] == '>':
+                'Fasta head line'
+                # append sequence & prion classification
+                if seq: lines.append(seq + ',' + str(prionClassification) + ',' + str(amyloidClassification))
+                seq = ''
+                # remove FASTA syntactic sugar
+                seq_id = lines_i[index].strip().replace(',', '').replace('>', '')
+                # remove uniprot metadata using pipe & equal sign delimiter
+                seq_id = " ".join((seq_id.split(" "))[1:]) if "|" in seq_id else seq_id
+                lastHeaderIndex = seq_id.index("=") - 3 if ('=' in seq_id) else len(seq_id)
+                lines.append('\n' + seq_id[:lastHeaderIndex] + ',')
+            else:
+                'Sequence line'
+                seq += lines_i[index].strip()
+                if (index == len(lines_i) - 1): lines.append(seq + ',' + str(prionClassification) + ',' + str(amyloidClassification))
+            index += 1
+        lines.append("\n")
+        file.close()
+
+    # Output CSV file
+    with open(csvPath, 'w') as file:
+        file.writelines(lines)
+        file.close()
+    return
+
+### main method
+
+#### Parse GPD FASTA into CSV
+# gpdDatasetPath = './GPD_proteome.faa'
+# gpdCSVDatasetPath = './GPD_proteome.csv'
+
+# gpdDatasetIndex = compressHeaders(gpdDatasetPath, gpdCSVDatasetPath)
+# print("done!")
+
+# # ### Chunk CSV into bins
+# # gpdChunkFolder = "./outputChunks"
+# # print("Reading data...")
+# # df_gpd = pd.read_csv(gpdCSVDatasetPath)
+# # print("Chunking...")
+# # n = 760000
+# # chunks = [df_gpd[i:i+n] for i in range(0,df_gpd.shape[0],n)]
+# # for i in range(0,df_gpd.shape[0],n):
+# #     df_gpd[i:i+n].to_csv(gpdChunkFolder + f"/gpd{int(i/n)}.csv", index=False)
+# #     print(f"Saved chunk {int(i/n)}.")
+# # print("done!")
+
+# fields, sequence = declareFields()
+
+# ### Get predictions
+# model = torch.load('./bestModel' + f'/publishedModel.pt')
+# gpd_predictions = list()
+
+# for i in range(10): 
+#     print(f"evaluating chunk {i}")
+#     chunk = runModel(model = model, csvDatasetPath='./outputChunks' + f"/gpd{i}.csv")
+#     gpd_predictions += chunk
+# print("done!")
+
+
+# best_model = torch.load('./bestModel' + f'/publishedModel.pt')
+# gpd_predictions = list()
+
+# for i in range(10): 
+#     print(f"evaluating chunk {i}")
+#     predictionsChunk, null = runModel(best_model, foldCount=10, csvFoldPathBase='./outputChunks/gpd')
+#     gpd_predictions += predictionsChunk
+    
+# print("done!")
+
+# negativeDataset = './negativeExamples/negative.fasta'
+# negativeCSVDataset = './negativeExamples/parsedNegativeDataset.csv'
+
+# gpdDatasetIndex = compressHeaders(negativeDataset, negativeCSVDataset)
+# predictionsChunk, null = runModel(best_model, foldCount=10, csvDatasetPath=negativeCSVDataset)
+
+# print("done!")
+
+
+# ### Write positives
+# from Bio.SeqIO import FastaIO
+# from Bio import SeqIO
+# output_file = "./output/gpdPositivesAlt.fasta"
+# fasta_out = FastaIO.FastaWriter(output_file, wrap=None)
+
+# print("generating sequence-header index...")
+
+# gpdProteinDict = SeqIO.index(gpdDatasetPath, "fasta")
+
+# print("finding positives...")
+# positiveCount = 0
+# for index, prediction in enumerate(gpd_predictions):
+#     if prediction == 1:
+#         fasta_out.write_record(gpdProteinDict[gpdDatasetIndex[index]])
+#         positiveCount += 1
+
+# print(f"found {positiveCount} positives")
+# print("done!")

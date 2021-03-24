@@ -3,8 +3,6 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from model import GRU
 
-from ray.tune.integration.torch import DistributedTrainableCreator, distributed_checkpoint_dir, is_distributed_trainable
-
 # set processing device
 import torch
 import torch.nn as nn
@@ -63,7 +61,7 @@ def optimizeHyperparameters(config, data_dir, checkpoint_dir=None, out_dir='./ou
     valid_loss_list = []
     global_steps_list = []
     
-    fullDataset, fields, sequence = declareFields(data_dir=data_dir)
+    fields, sequence = declareFields(train=True)
     trainData, testData = load_data(fields, data_dir)
 
     # create iterators for current fold
@@ -72,6 +70,7 @@ def optimizeHyperparameters(config, data_dir, checkpoint_dir=None, out_dir='./ou
                         device=device, sort=True, sort_within_batch=True)
     test_iter =  BucketIterator(testData, batch_size=config['batch_size'], sort_key=lambda x: len(x.sequence),
                         device=device, sort=True, sort_within_batch=True)
+    sequence.build_vocab(trainData)
     eval_every=len(train_iter) // 2
 
     # initialize model
@@ -145,7 +144,7 @@ def optimizeHyperparameters(config, data_dir, checkpoint_dir=None, out_dir='./ou
 
 def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
     data_dir = os.path.abspath("./")    
-    fullDataset, fields, sequence = declareFields(data_dir=data_dir)
+    fields, sequence = declareFields(train=True)
     
     config = {
         "number_of_epochs": tune.sample_from(lambda _: np.random.randint(2, 25)),
@@ -180,20 +179,20 @@ def main(num_samples=10, max_num_epochs=10, gpus_per_trial=1):
     print("Best trial final validation loss: {}".format(
         best_trial.last_result["valid_loss"]))
 
-    best_trained_model = GRU(vocab=sequence.vocab, dimension=best_trial.config['dimension'], sequenceDepth=best_trial.config['sequence_feature_depth'], dropoutWithinLayers=best_trial.config['dropout_within_layers'], dropoutOutput=best_trial.config['dropout_output'])
+    # best_trained_model = GRU(vocab=sequence.vocab, dimension=best_trial.config['dimension'], sequenceDepth=best_trial.config['sequence_feature_depth'], dropoutWithinLayers=best_trial.config['dropout_within_layers'], dropoutOutput=best_trial.config['dropout_output'])
 
-    device = "cpu"
-    if torch.cuda.is_available():
-        device = "cuda:0"
-        if gpus_per_trial > 1:
-            best_trained_model = nn.DataParallel(best_trained_model)
-    best_trained_model.to(device)
+    # device = "cpu"
+    # if torch.cuda.is_available():
+    #     device = "cuda:0"
+    #     if gpus_per_trial > 1:
+    #         best_trained_model = nn.DataParallel(best_trained_model)
+    # best_trained_model.to(device)
 
-    best_checkpoint_dir = best_trial.checkpoint.value
+    # best_checkpoint_dir = best_trial.checkpoint.value
 
-    model_state, optimizer_state = torch.load(os.path.join(
-        best_checkpoint_dir, "checkpoint"))
-    best_trained_model.load_state_dict(model_state)
+    # model_state, optimizer_state = torch.load(os.path.join(
+    #     best_checkpoint_dir, "checkpoint"))
+    # best_trained_model.load_state_dict(model_state)
 
 
 if __name__ == "__main__":

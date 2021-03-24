@@ -7,6 +7,7 @@ train.csv
 valid.csv
 test.csv
 full.csv
+psi-searchOutput/
 
 # External datasets
 GPD_proteome.csv
@@ -15,8 +16,11 @@ GPD_proteome_orthology_assignment.txt
 
 # Logs
 tensorboard_logs/
+ipynb_checkpoints/
 
 # IDE
 .vscode/
 __pycache__/
 .dccache
+.ipynb_checkpoints/
+env.py
