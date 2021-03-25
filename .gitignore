@@ -17,6 +17,7 @@ GPD_proteome_orthology_assignment.txt
 # Logs
 tensorboard_logs/
 ipynb_checkpoints/
+logs/
 
 # IDE
 .vscode/
