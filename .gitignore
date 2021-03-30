@@ -2,7 +2,6 @@
 negativeExamples/
 positiveExamples/
 outputChunks/
-output/
 train.csv
 valid.csv
 test.csv
