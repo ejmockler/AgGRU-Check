@@ -1,7 +1,7 @@
 # AgGRU-Check
 Gated recurrent units classify amyloidogenic proteins
 
-Check the main notebook, `amyloidClassification.ipynb` for current progress on this project.
+Check the main notebook, [amyloidClassification.ipynb](amyloidClassification.ipynb) for current progress on this project.
 
 Details are available at this Drive link:
 
