@@ -6,12 +6,9 @@ train.csv
 valid.csv
 test.csv
 full.csv
+gpd[0-9].csv
+GPD_proteome*
 psi-searchOutput/
-
-# External datasets
-GPD_proteome.csv
-GPD_proteome.faa
-GPD_proteome_orthology_assignment.txt
 
 # Logs
 tensorboard_logs/
