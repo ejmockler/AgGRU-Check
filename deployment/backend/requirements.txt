@@ -6,3 +6,4 @@ sse_starlette==1.6.1
 torch==2.0.1
 torchtext==0.15.2
 uvicorn==0.23.0
+gunicorn==20.1.0
