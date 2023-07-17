@@ -8,7 +8,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from fastapi.logger import logger
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -69,7 +69,10 @@ async def startup_event():
     app.package = {"ensemble": ensemble, "vocab": vocab, "tokenizer": tokenizer}
 
 
-@app.get("/api/predict", response_class=EventSourceResponse)
+from fastapi.responses import StreamingResponse
+
+
+@app.post("/api/predict")
 async def do_predict(request: Request):
     """
     Perform prediction on input data
@@ -99,7 +102,10 @@ async def do_predict(request: Request):
             ]
 
             for future in asyncio.as_completed(prediction_tasks):
-                index, prediction = await future
+                (
+                    index,
+                    prediction,
+                ) = await future
                 yield f"data: {jsonable_encoder({f'model_{index}': prediction.item()})}\n\n"
 
     return StreamingResponse(predict_stream(), media_type="text/event-stream")
