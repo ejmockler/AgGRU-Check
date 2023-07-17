@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/ws": "^8.5.5",
+    "sass": "^1.63.6"
+  },
+  "dependencies": {
+    "kute.js": "^2.2.4",
+    "ws": "^8.13.0"
+  }
+}
