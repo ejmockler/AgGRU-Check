@@ -11,9 +11,14 @@ GPD_proteome*
 psi-searchOutput/
 
 # Logs
+wandb/
 tensorboard_logs/
+lightning_logs/
 ipynb_checkpoints/
 logs/
+agGRU-Check/
+epoch=*.chpkt
+model*.pt
 
 # IDE
 .vscode/
