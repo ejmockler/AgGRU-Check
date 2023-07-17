@@ -3,10 +3,12 @@ import os
 from dotenv import load_dotenv
 
 from uvicorn import run
-from fastapi import FastAPI, Request, WebSocket, status
+from fastapi import FastAPI, Request
+from sse_starlette.sse import EventSourceResponse
+
 from fastapi.logger import logger
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -67,19 +69,22 @@ async def startup_event():
     app.package = {"ensemble": ensemble, "vocab": vocab, "tokenizer": tokenizer}
 
 
-@app.websocket("/api/predict")
-async def do_predict(websocket: WebSocket):
+@app.get("/api/predict", response_class=EventSourceResponse)
+async def do_predict(request: Request):
     """
     Perform prediction on input data
     """
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_json()
-        try:
-            validated_data = ProteinInput(**data)
-        except ValueError as ve:
-            await websocket.send_text(f"Error: {ve}")
-            continue
+    data = await request.json()
+    try:
+        validated_data = ProteinInput(**data)
+    except ValueError as ve:
+
+        def error_stream():
+            yield f"event: error\ndata: Error: {ve}\n\n"
+
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    async def predict_stream():
         for sequence in validated_data.sequences:
             sequence = [
                 app.package["vocab"][token]
@@ -95,10 +100,9 @@ async def do_predict(websocket: WebSocket):
 
             for future in asyncio.as_completed(prediction_tasks):
                 index, prediction = await future
-                # Send the prediction back to the client, including the model index
-                await websocket.send_json(
-                    {f"model_{index}": jsonable_encoder(prediction.tolist())}
-                )
+                yield f"data: {jsonable_encoder({f'model_{index}': prediction.item()})}\n\n"
+
+    return StreamingResponse(predict_stream(), media_type="text/event-stream")
 
 
 if __name__ == "__main__":
