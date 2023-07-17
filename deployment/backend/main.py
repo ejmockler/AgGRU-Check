@@ -31,8 +31,14 @@ app = FastAPI(
     license_info=None,
 )
 
-# Allow CORS for local debugging
-app.add_middleware(CORSMiddleware, allow_origins=["*"])
+# Loose CORS since this is a read-only API with fixed resources
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,  # Allows cookies to be sent with the request
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Load custom exception handlers
 # app.add_exception_handler(RequestValidationError, validation_exception_handler)
