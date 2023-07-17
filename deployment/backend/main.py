@@ -106,7 +106,7 @@ if __name__ == "__main__":
     run(
         "main:app",
         host="0.0.0.0",
-        port=8080,
+        port=int(os.getenv("DEPLOYMENT_PORT")),
         reload=True,
         log_config="log.ini",
     )
