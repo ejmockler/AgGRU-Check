@@ -27,3 +27,6 @@ __pycache__/
 .ipynb_checkpoints/
 env.py
 /serve
+
+# Private
+.env
