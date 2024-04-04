@@ -7,7 +7,7 @@ Check the main notebook, [amyloidClassification.ipynb](amyloidClassification.ipy
 
 ## Gut Phage Database
 
-Download these into the root dir:
+Before running the main notebook, download these datasets into the root dir:
 
 - GPD_proteome.faa
 - GPD_proteome_orthology_assignment.txt
