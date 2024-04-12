@@ -8,6 +8,7 @@ test.csv
 full.csv
 gpd[0-9].csv
 GPD_proteome*
+*.fasta
 psi-searchOutput/
 
 # Logs
@@ -24,9 +25,13 @@ model*.pt
 .vscode/
 __pycache__/
 .dccache
+
 .ipynb_checkpoints/
 env.py
 /serve
+
+# OS
+.DS_Store
 
 # Private
 .env
