@@ -1,22 +1,16 @@
 import asyncio
 import os
-from dotenv import load_dotenv
 
+from fastapi.encoders import jsonable_encoder
+from dotenv import load_dotenv
 from uvicorn import run
 from fastapi import FastAPI, Request
 from sse_starlette.sse import EventSourceResponse
-
-from fastapi.logger import logger
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.exceptions import RequestValidationError
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-
 import concurrent.futures
-from torch import load as torch_load
-from torch import tensor, stack, mean
+from torch import load as torch_load, tensor
 from torchtext.data.utils import get_tokenizer
-
 from model import LitGRU
 from data import ProteinInput
 
@@ -25,44 +19,29 @@ load_dotenv()
 app = FastAPI(
     title="AgGRU-Check API",
     description="Classify amyloidogenic regions in protein sequences",
-    version="0.0.1",
-    terms_of_service=None,
-    contact=None,
-    license_info=None,
+    version="0.0.1"
 )
 
-# Loose CORS since this is a read-only API with fixed resources
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,  # Allows cookies to be sent with the request
-    allow_methods=["*"],  # Allows all HTTP methods
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=[os.getenv("ALLOWED_ORIGIN")],
+    allow_credentials=True,
+    allow_methods=["POST"],
+    allow_headers=["*"],
 )
 
-# Load custom exception handlers
-# app.add_exception_handler(RequestValidationError, validation_exception_handler)
-# app.add_exception_handler(Exception, python_exception_handler)
-
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
-
 
 async def predict_single(model, sequence, sequence_length, modelIndex):
     device = model.device
     prediction = model(sequence.unsqueeze(0).to(device), sequence_length.to("cpu"))
     return modelIndex, prediction
 
-
-# Tokenize peptide sequences by splitting into individual amino acids
 def split(sequence):
     return [char for char in sequence]
 
-
 @app.on_event("startup")
 async def startup_event():
-    """
-    Initialize FastAPI and add variables
-    """
     vocab = torch_load("./vocab.pt", map_location="cpu")
     ensemble = [
         LitGRU.load_from_checkpoint(
@@ -71,27 +50,16 @@ async def startup_event():
         for checkpoint in os.listdir("./bestCheckpoints")
     ]
     tokenizer = get_tokenizer(split)
-    # add model and vocab to app state
     app.package = {"ensemble": ensemble, "vocab": vocab, "tokenizer": tokenizer}
-
-
-from fastapi.responses import StreamingResponse
-
 
 @app.post("/api/predict")
 async def do_predict(request: Request):
-    """
-    Perform prediction on input data
-    """
     data = await request.json()
+
     try:
-        validated_data = ProteinInput(**data)
+        validated_data = ProteinInput(sequences=data["sequenceList"])
     except ValueError as ve:
-
-        def error_stream():
-            yield f"event: error\ndata: Error: {ve}\n\n"
-
-        return StreamingResponse(error_stream(), media_type="text/event-stream")
+        return StreamingResponse(error_stream(str(ve)), media_type="text/event-stream")
 
     async def predict_stream():
         for sequence in validated_data.sequences:
@@ -108,17 +76,15 @@ async def do_predict(request: Request):
             ]
 
             for future in asyncio.as_completed(prediction_tasks):
-                (
-                    index,
-                    prediction,
-                ) = await future
+                index, prediction = await future
                 yield f"data: {jsonable_encoder({f'model_{index}': prediction.item()})}\n\n"
 
     return StreamingResponse(predict_stream(), media_type="text/event-stream")
 
+def error_stream(error_message):
+    yield f"event: error\ndata: Error: {error_message}\n\n"
 
 if __name__ == "__main__":
-    # server api
     run(
         "main:app",
         host="0.0.0.0",

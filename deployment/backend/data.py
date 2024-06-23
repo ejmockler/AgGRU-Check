@@ -5,7 +5,6 @@ from torch import tensor
 from pydantic import BaseModel, validator
 from typing import List
 
-
 def is_fastq(seq: str) -> bool:
     lines = seq.strip().split("\n")
     if len(lines) % 4 != 0:
@@ -17,23 +16,23 @@ def is_fastq(seq: str) -> bool:
             return False
     return True
 
-
 def is_fasta(seq: str) -> bool:
     lines = seq.strip().split("\n")
-    # FASTA sequences start with ">"
     if not lines[0].startswith(">"):
         return False
-    # Sequence must not be empty
     if len(lines) <= 1:
         return False
     return True
-
 
 class ProteinInput(BaseModel):
     sequences: List[str]
 
     @validator("sequences", each_item=True)
     def parse_sequence(cls, sequence):
+        """
+        Validate and parse protein sequences in FASTA or FASTQ format.
+        Ensure sequences contain only canonical amino acids and are not too long.
+        """
         amino_acid_vocab = set("ACDEFGHIKLMNPQRSTVWY")
         lines = sequence.strip().split("\n")
         processed_sequence = ""
@@ -60,6 +59,7 @@ class ProteinInput(BaseModel):
                 f"The sequence contains invalid amino acids: {', '.join(invalid_chars)}. Canonical amino acids are: {','.join(amino_acid_vocab)}"
             )
         return processed_sequence
+
 
 
 def collate_fn(batch):

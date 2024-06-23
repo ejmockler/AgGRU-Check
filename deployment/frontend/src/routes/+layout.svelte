@@ -8,7 +8,7 @@
     background: linear-gradient(343deg, #07c090, #1971a9, #934646, #00ecf4);
     background-size: 800% 800%;
 
-    animation: backgroundSwoop 14s ease infinite;
+    animation: backgroundSwoop 74s ease infinite;
   }
 
   @keyframes backgroundSwoop {

@@ -1,31 +1,45 @@
 <script>
-  import { enhance } from "$app/forms";
+  import { source } from "sveltekit-sse";
+
+  let output = "";
+  let eventSourceValue;
+
+  function handleFormSubmission(event) {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const sequences = formData.get("sequences");
+    const payload = { sequences };
+
+    const actionUrl = event.target.action;
+
+    eventSourceValue = source(actionUrl, {
+      options: {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      },
+    }).select("message");
+
+    eventSourceValue.subscribe((value) => {
+      output += value + "\n";
+      console.log("Received message:", value);
+    });
+  }
 </script>
 
 <section>
   <h1>AgGRU-Check</h1>
-  <form
-    method="POST"
-    action="?/predict"
-    use:enhance={({ formElement, formData, action, cancel, submitter }) => {
-      // `formElement` is this `<form>` element
-      // `formData` is its `FormData` object that's about to be submitted
-      // `action` is the URL to which the form is posted
-      // calling `cancel()` will prevent the submission
-      // `submitter` is the `HTMLElement` that caused the form to be submitted
-      return async ({ result, update }) => {
-        // `result` is an `ActionResult` object
-        // `update` is a function which triggers the default logic that would be triggered if this callback wasn't set
-      };
-    }}
-  >
+  <form method="POST" action="/predict" on:submit={handleFormSubmission}>
     <textarea
       name="sequences"
-      aria-label="Enter up to 5 protein sequences (raw, FASTA or FASTQ)"
-      placeholder="Enter up to 5 protein sequences (raw, FASTA or FASTQ)"
+      aria-label="Enter up to 5 protein sequences (either raw, FASTA or FASTQ)"
+      placeholder="Enter up to 5 protein sequences (either raw, FASTA or FASTQ)"
     />
-    <button>Submit</button>
+    <button type="submit">Submit</button>
   </form>
+  <pre id="output">{output}</pre>
 </section>
 
 <style lang="scss">
@@ -38,10 +52,10 @@
   section {
     margin: 4em;
   }
+
   form {
     display: flex;
     justify-content: flex-start;
-
     flex-direction: column;
     gap: 0.75rem;
   }
@@ -51,10 +65,17 @@
     background-color: slategray;
     color: white;
   }
+
   textarea {
     min-height: 20vh;
     min-width: 60vw;
-    color: white;
-    background-color: darkslategray;
+    color: black;
+    background-color: whitesmoke;
+  }
+
+  pre {
+    background-color: #f0f0f0;
+    padding: 1em;
+    white-space: pre-wrap;
   }
 </style>
