@@ -29,7 +29,7 @@
   }
 </script>
 
-<section>
+<section style="z-index: 1">
   <h1>AgGRU-Check</h1>
   <form method="POST" action="/predict" on:submit={handleFormSubmission}>
     <textarea
