@@ -4,12 +4,16 @@ import { API_URL } from "$env/static/private";
 import type { RequestHandler } from "./$types";
 
 export const POST: RequestHandler = async ({ request }) => {
-  console.log(request.body);
   const data = await request.json();
   const sequences = data.sequences;
 
   // Split the input into individual sequences
-  const sequenceList = splitSequences(sequences);
+  console.log(data);
+  const sequenceList = splitSequences(sequences).filter(
+    (seq) => !data.processedSequences.includes(seq)
+  );
+
+  console.log("sequenceList", sequenceList);
 
   if (sequenceList.length === 0) {
     return json({ error: "No sequences provided" }, { status: 400 });
@@ -37,8 +41,12 @@ export const POST: RequestHandler = async ({ request }) => {
           emit("end", "end");
           return;
         }
-        console.log(decoder.decode(value, { stream: true }));
-        emit("message", decoder.decode(value, { stream: true }));
+        const lines = decoder.decode(value, { stream: true }).split("\n");
+        for (const line of lines) {
+          if (line.trim()) {
+            emit("message", line);
+          }
+        }
         await pushData();
       }
 

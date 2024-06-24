@@ -5,7 +5,6 @@ from fastapi.encoders import jsonable_encoder
 from dotenv import load_dotenv
 from uvicorn import run
 from fastapi import FastAPI, Request
-from sse_starlette.sse import EventSourceResponse
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import concurrent.futures
@@ -63,12 +62,12 @@ async def do_predict(request: Request):
 
     async def predict_stream():
         for sequence in validated_data.sequences:
-            sequence = [
+            sequenceVector = [
                 app.package["vocab"][token]
-                for token in app.package["tokenizer"](sequence)
+                for token in app.package["tokenizer"](sequence.upper())
             ]
-            sequence_tensor = tensor(sequence)
-            sequence_length = tensor([len(sequence)]).int()
+            sequence_tensor = tensor(sequenceVector)
+            sequence_length = tensor([len(sequenceVector)]).int()
 
             prediction_tasks = [
                 predict_single(model, sequence_tensor, sequence_length, i)
@@ -77,7 +76,9 @@ async def do_predict(request: Request):
 
             for future in asyncio.as_completed(prediction_tasks):
                 index, prediction = await future
-                yield f"data: {jsonable_encoder({f'model_{index}': prediction.item()})}\n\n"
+                yield f"data: {jsonable_encoder({f'model_{index}': prediction.item(), 'sequence': sequence})}\n\n"
+        
+        yield "event: end\ndata: end\n\n"
 
     return StreamingResponse(predict_stream(), media_type="text/event-stream")
 
