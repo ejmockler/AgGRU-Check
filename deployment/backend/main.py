@@ -62,9 +62,10 @@ async def do_predict(request: Request):
 
     async def predict_stream():
         for sequence in validated_data.sequences:
+            sequence = sequence.upper()
             sequenceVector = [
                 app.package["vocab"][token]
-                for token in app.package["tokenizer"](sequence.upper())
+                for token in app.package["tokenizer"](sequence)
             ]
             sequence_tensor = tensor(sequenceVector)
             sequence_length = tensor([len(sequenceVector)]).int()

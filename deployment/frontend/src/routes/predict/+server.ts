@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ request }) => {
   // Split the input into individual sequences
   console.log(data);
   const sequenceList = splitSequences(sequences).filter(
-    (seq) => !data.processedSequences.includes(seq)
+    (seq) => !data.processedSequences.includes(seq.toLocaleUpperCase())
   );
 
   console.log("sequenceList", sequenceList);
