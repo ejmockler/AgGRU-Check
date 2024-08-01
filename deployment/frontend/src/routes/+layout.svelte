@@ -1,7 +1,6 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import Matter from "matter-js";
-  import { source } from "sveltekit-sse";
   import { tweened } from "svelte/motion";
   import { expoOut } from "svelte/easing";
 
@@ -13,7 +12,7 @@
   let exclusionZoneRadius;
   let numDroplets;
   const blobs = [];
-  const wallThickness = 20;
+  const wallThickness = 10;
   const blobMargin = 100; // Margin from the walls to ensure no overlap
 
   let resizeTimeout;
@@ -46,16 +45,16 @@
     engine.world.gravity.y = 0;
 
     // Create a Matter.js render object
-    const overscanFactor = 1.1;
     render = Matter.Render.create({
       element: document.querySelector("#canvas-container"),
       engine: engine,
       options: {
-        width: window.innerWidth * overscanFactor,
-        height: window.innerHeight * overscanFactor,
+        width: window.innerWidth,
+        height: window.innerHeight,
         background: "transparent",
         wireframes: false,
-        pixelRatio: "auto", // Ensure the render scales with the device pixel ratio
+        pixelRatio: "auto",
+        showBounds: false,
       },
     });
 
@@ -229,6 +228,11 @@
 
     // Adjust the canvas size and blobs on window resize with debounce
     const handleResize = debounce(() => {
+      if (render && render.canvas) {
+        render.canvas.width = window.innerWidth;
+        render.canvas.height = window.innerHeight;
+        Matter.Render.setPixelRatio(render, window.devicePixelRatio); // Ensure proper scaling
+      }
       fadeCanvasOut(() => {
         destroyMatterJs();
         initializeMatterJs();
@@ -238,6 +242,23 @@
         }
       });
     }, 350);
+
+    window.addEventListener("resize", () => {
+      pauseEngine();
+      // Immediately adjust canvas size
+      if (render && render.canvas) {
+        render.canvas.width = window.innerWidth;
+        render.canvas.height = window.innerHeight;
+        Matter.Render.setPixelRatio(render, window.devicePixelRatio);
+      }
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        handleResize();
+        if (!isPaused) {
+          resumeEngine();
+        }
+      }, 350);
+    });
 
     const pauseEngine = () => {
       if (render) {
@@ -252,17 +273,6 @@
         Matter.Runner.run(engine);
       }
     };
-
-    window.addEventListener("resize", () => {
-      pauseEngine();
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        handleResize();
-        if (!isPaused) {
-          resumeEngine();
-        }
-      }, 350);
-    });
 
     onDestroy(() => {
       window.removeEventListener("resize", handleResize);
@@ -362,9 +372,9 @@
 
   const createSoftBody = (x, y, size, color) => {
     const particleOptions = {
-      friction: 0.2,
-      frictionAir: 0.05,
-      restitution: 0.4,
+      friction: 0.5,
+      frictionAir: 0.1,
+      restitution: 0.3,
       render: { fillStyle: color },
     };
     const particles = Matter.Composites.stack(x, y, 3, 3, 10, 10, (x, y) =>
@@ -385,7 +395,6 @@
   <div id="canvas-container" class="canvas-container"></div>
   <label class="play-pause">
     <input type="checkbox" id="play-pause" on:change={toggleEngine} checked />
-    <span></span>
   </label>
   <slot />
 </main>
@@ -399,9 +408,14 @@
     background: linear-gradient(343deg, #07c090, #1971a9, #934646, #00ecf4);
     background-size: 800% 800%;
     animation: backgroundSwoop 74s ease infinite;
-    overflow: scroll;
     margin: 0;
     padding: 0;
+  }
+
+  :global(*) {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
 
   @keyframes backgroundSwoop {
@@ -417,13 +431,12 @@
   }
 
   main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     min-height: 100%;
     position: relative;
     overflow: scroll;
+    margin: 0;
+    padding: 0;
+    display: contents;
   }
 
   .canvas-container {
@@ -433,6 +446,8 @@
     width: 100%;
     height: 100%;
     overflow: hidden; // Ensure overflow is hidden
+    border: none;
+    outline: none;
   }
 
   canvas {
@@ -445,6 +460,8 @@
     width: 100vw; // Ensure the canvas is oversized
     height: 100vh; // Ensure the canvas is oversized
     transform: translate(-50%, -50%); // Center the canvas
+    border: none;
+    outline: none;
   }
 
   .play-pause {

@@ -1,6 +1,7 @@
 <script>
   export let sequence;
   export let models;
+  export let count;
 
   // Function to get color based on confidence level
   const getColor = (confidence) => {
@@ -11,6 +12,7 @@
 </script>
 
 <div class="result-container">
+  <span class="count">{count}</span>
   <div class="sequence">{sequence}</div>
   {#each models as { model, confidence }}
     <div class="model-container">
@@ -27,14 +29,14 @@
 
 <style>
   .result-container {
-    margin: 1em 0;
     padding: 1em;
     border: 1px solid #ccc;
     border-radius: 8px;
-    width: 100%;
     background-color: #f9f9f9;
-    width: 220px;
+    width: 105px;
+    min-width: 105px;
     height: 105px;
+    position: relative;
   }
 
   .sequence {
@@ -44,6 +46,22 @@
     max-width: 100%;
     text-overflow: ellipsis;
     overflow: hidden;
+  }
+
+  .count {
+    font-size: 0.6em;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+    width: 10px;
+    height: 10px;
+    line-height: 10px;
+    text-align: center;
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: gainsboro;
+    border-radius: 100%;
+    padding: 0.3em;
   }
 
   .model-container {
