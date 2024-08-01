@@ -5,24 +5,31 @@
 
   // Function to get color based on confidence level
   const getColor = (confidence) => {
-    const red = Math.min(255, 255 - Math.round(confidence * 255));
-    const green = Math.min(255, Math.round(confidence * 255));
-    return `rgb(${red},${green},0)`;
+    const hue = confidence * 120; // 0 is red, 120 is green
+    return `hsl(${hue}, 100%, 50%)`;
   };
+
+  // Sort models by confidence in descending order
+  $: sortedModels = models.sort((a, b) => b.confidence - a.confidence);
 </script>
 
 <div class="result-container">
   <span class="count">{count}</span>
   <div class="sequence">{sequence}</div>
-  {#each models as { model, confidence }}
+  {#each sortedModels as { model, confidence }, i}
     <div class="model-container">
       <div class="model-label">Model {Number(model) + 1}:</div>
-      <div
-        class="confidence-bar"
-        style="background-color: {getColor(confidence)}; width: {confidence *
-          100}%"
-      ></div>
-      <div class="confidence-label">{confidence.toFixed(2)}</div>
+      <div class="bar-container">
+        <div
+          class="confidence-bar"
+          style="width: {confidence * 100}%; background-color: {getColor(
+            confidence
+          )};"
+        ></div>
+        <div class="confidence-label">
+          {(confidence * 100).toFixed(1)}%
+        </div>
+      </div>
     </div>
   {/each}
 </div>
@@ -33,59 +40,72 @@
     border: 1px solid #ccc;
     border-radius: 8px;
     background-color: #f9f9f9;
-    width: 105px;
-    min-width: 105px;
-    height: 105px;
     position: relative;
+    width: 300px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .sequence {
     font-weight: bold;
     font-size: 1.2em;
-    margin-bottom: 0.5em;
+    margin-bottom: 1em;
     max-width: 100%;
     text-overflow: ellipsis;
     overflow: hidden;
+    white-space: nowrap;
   }
 
   .count {
-    font-size: 0.6em;
-    font-weight: bold;
-    margin-bottom: 0.5em;
-    width: 10px;
-    height: 10px;
-    line-height: 10px;
-    text-align: center;
     position: absolute;
-    top: 4px;
-    right: 4px;
-    background-color: gainsboro;
-    border-radius: 100%;
-    padding: 0.3em;
+    top: -10px;
+    left: -10px;
+    background-color: #007bff;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9em;
   }
 
   .model-container {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     margin-bottom: 0.75em;
   }
 
   .model-label {
     font-size: 0.9em;
+    width: 80px;
     white-space: nowrap;
-    text-wrap: nowrap;
+  }
+
+  .bar-container {
+    flex-grow: 1;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
   }
 
   .confidence-bar {
-    height: 1em;
-    width: 100%;
-    margin-left: 0.5em;
-    border-radius: 4px;
-    transition: width 0.3s ease;
+    height: 100%;
+    transition:
+      width 0.3s ease,
+      background-color 0.3s ease;
   }
 
   .confidence-label {
-    font-size: 0.9em;
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8em;
+    font-weight: bold;
+    text-shadow: 0 0 2px white;
   }
 </style>

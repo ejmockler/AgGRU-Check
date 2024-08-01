@@ -16,7 +16,7 @@
   const blobMargin = 100; // Margin from the walls to ensure no overlap
 
   let resizeTimeout;
-  let isPaused = false;
+  let isPlaying = true;
 
   // Tweened store for engine time scale
   const timeScale = tweened(1, {
@@ -208,8 +208,9 @@
   }
 
   function toggleEngine() {
+    isPlaying = !isPlaying;
     const checkbox = document.querySelector("#play-pause");
-    if (checkbox.checked) {
+    if (isPlaying) {
       fadeCanvasOut(() => {
         destroyMatterJs();
         initializeMatterJs();
@@ -393,9 +394,9 @@
 
 <main style="height: 100vh">
   <div id="canvas-container" class="canvas-container"></div>
-  <label class="play-pause">
-    <input type="checkbox" id="play-pause" on:change={toggleEngine} checked />
-  </label>
+  <button class="play-pause" on:click={toggleEngine}>
+    <span class="icon" class:play={!isPlaying} class:pause={isPlaying}></span>
+  </button>
   <slot />
 </main>
 
@@ -465,29 +466,65 @@
   }
 
   .play-pause {
-    position: absolute;
-    top: 10px;
-    right: 10px;
+    position: fixed;
+    top: 20px;
+    right: 20px;
     width: 50px;
     height: 50px;
     cursor: pointer;
-  }
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s;
+    border: none;
+    padding: 0;
 
-  .play-pause input {
-    display: none;
-  }
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.7);
+    }
 
-  .play-pause span {
-    display: block;
-    width: 100%;
-    height: 100%;
-    background: no-repeat center/50%
-      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>');
-    transition: background 0.3s;
-  }
+    .icon {
+      position: relative;
+      width: 20px;
+      height: 20px;
+    }
 
-  .play-pause input:checked + span {
-    background: no-repeat center/50%
-      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>');
+    .play {
+      &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-30%, -50%);
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 10px 0 10px 15px;
+        border-color: transparent transparent transparent white;
+      }
+    }
+
+    .pause {
+      &::before,
+      &::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        width: 6px;
+        height: 20px;
+        background-color: white;
+      }
+
+      &::before {
+        left: 0;
+      }
+
+      &::after {
+        right: 0;
+      }
+    }
   }
 </style>

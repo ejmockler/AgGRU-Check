@@ -80,7 +80,7 @@
     }
   }
 
-  const inputMessage = `Could a protein be amyloidgenic?
+  const inputMessage = `Is your protein amyloidgenic?
 
 Enter up to 5 protein sequences 
 (either raw, FASTA or FASTQ)`;
@@ -258,7 +258,7 @@ Enter up to 5 protein sequences
 
   section {
     z-index: 1;
-    margin: 25vh 0;
+    margin: 25vh 0 2vh;
     display: flex;
     position: relative;
     flex-direction: column;
@@ -301,7 +301,7 @@ Enter up to 5 protein sequences
     z-index: 1;
     opacity: 0.9;
     padding-left: 0;
-    max-width: 90vw;
+    margin-bottom: 1em;
 
     & .results {
       margin: 1em;
