@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
   import { source } from "sveltekit-sse";
   import Result from "./Result.svelte";
   import { browser } from "$app/environment";
+  import Modal from "./Modal.svelte"; // Assume we create this component
 
   let output = "";
   let eventSourceValue;
@@ -85,92 +87,46 @@
 Enter up to 5 protein sequences 
 (either raw, FASTA or FASTQ)`;
 
-  let aboutOpen = false;
-  let aboutButtonRef: HTMLButtonElement;
-  let modalRef: HTMLDivElement;
+  let activeModal = null;
 
-  function toggleAbout() {
-    aboutOpen = !aboutOpen;
+  function toggleModal(modalName) {
+    activeModal = activeModal === modalName ? null : modalName;
   }
 
-  function handleClickOutside(event: MouseEvent) {
-    if (
-      aboutOpen &&
-      modalRef &&
-      !modalRef.contains(event.target as Node) &&
-      !aboutButtonRef.contains(event.target as Node)
-    ) {
-      aboutOpen = false;
-    }
+  let handleClickOutside;
+
+  onMount(() => {
+    handleClickOutside = (event) => {
+      const modalElement = document.querySelector(".modal");
+      if (modalElement && !modalElement.contains(event.target)) {
+      }
+    };
+  });
+
+  $: if (browser && activeModal) {
+    document.addEventListener("click", handleClickOutside);
+  } else if (browser) {
+    document.removeEventListener("click", handleClickOutside);
   }
 
-  $: if (browser) {
-    if (aboutOpen) {
-      setTimeout(() => {
-        document.addEventListener("click", handleClickOutside);
-      }, 0);
-    } else {
+  $: console.log(activeModal);
+
+  onDestroy(() => {
+    if (browser) {
       document.removeEventListener("click", handleClickOutside);
     }
-  }
+  });
 </script>
-
-<svelte:window on:blur={() => (aboutOpen = false)} />
 
 <section>
   <div class="header">
     <div class="header__links">
-      <button
-        class="about__link"
-        on:click={toggleAbout}
-        bind:this={aboutButtonRef}
+      <button class="about__link" on:click={() => toggleModal("about")}
+        >about</button
       >
-        about
-      </button>
-      {#if aboutOpen}
-        <div class="about__modal" bind:this={modalRef}>
-          <b>AgGRU-Check</b>
-          <br />
-          Classify aggregation-prone proteins, via gated recurrent units
-          <br />
-          <ul style="margin:1em">
-            <li>
-              <i>What's the output?</i> <br />A likelihood whether the input
-              protein is amyloidogenic—between 0 and 1. High is "probably
-              amyloid" while low is "maybe not".
-            </li>
-            <li>
-              <i>How does it work?</i> <br />The model is a recurrent neural
-              network, trained on a dataset of known amyloidogenic proteins.
-            </li>
-            <li>
-              <i>Where can I learn more?</i> <br /> Check out the
-              <a
-                href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
-                target="_blank">GitHub</a
-              >
-              and
-              <a
-                href="https://github.com/ejmockler/AgGRU-Check/blob/main/details.pdf"
-                target="_blank">technical paper</a
-              > to run this model for yourself & read more about this implementation.
-            </li>
-            <li>
-              <i>Can I cite this?</i>
-              <pre class="citation">
-@misc&#123;
-  ejmockler2024aggrucheck,
-  author = &#123;Eric Jing Mockler&#125;,
-  title = &#123;Gated recurrent units classify amyloidogenic proteins from sequence alone&#125;,
-  year = &#123;2024&#125;,
-  publisher = &#123;Zenodo&#125;,
-  doi = &#123;10.5281/zenodo.13147167&#125;,
-&#125;
-                </pre>
-            </li>
-          </ul>
-        </div>
-      {/if}
+      <button class="about__link" on:click={() => toggleModal("terms")}
+        >terms</button
+      >
       <a
         href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
         target="_blank"
@@ -180,6 +136,96 @@ Enter up to 5 protein sequences
 
     <h1>AgGRU? Check:</h1>
   </div>
+
+  {#if activeModal === "about"}
+    <Modal title="AgGRU-Check" on:close={() => (activeModal = null)}>
+      <p>Classify aggregation-prone proteins, via gated recurrent units</p>
+      <ul style="margin:1em">
+        <li>
+          <i>What's the output?</i> <br />A likelihood whether the input protein
+          is amyloidogenic—between 0 and 1. High is "probably amyloid" while low
+          is "maybe not".
+        </li>
+        <li>
+          <i>How does it work?</i> <br />The model is a recurrent neural
+          network, trained on a dataset of known amyloidogenic proteins.
+        </li>
+        <li>
+          <i>Where can I learn more?</i> <br /> Check out the
+
+          <a
+            href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
+            target="_blank">GitHub</a
+          >
+          and
+
+          <a
+            href="https://github.com/ejmockler/AgGRU-Check/blob/main/details.pdf"
+            target="_blank">technical paper</a
+          > to run this model for yourself & read more about this implementation.
+        </li>
+        <li>
+          <i>Can I cite this?</i>
+          <pre class="citation">
+@misc&#123;
+  ejmockler2024aggrucheck,
+  author = &#123;Eric Jing Mockler&#125;,
+  title = &#123;Gated recurrent units classify amyloidogenic proteins from sequence alone&#125;,
+  year = &#123;2024&#125;,
+  publisher = &#123;Zenodo&#125;,
+  doi = &#123;10.5281/zenodo.13147167&#125;,
+&#125;
+          </pre>
+        </li>
+      </ul>
+    </Modal>
+  {/if}
+
+  {#if activeModal === "terms"}
+    <Modal title="Terms of Use" on:close={() => (activeModal = null)}>
+      <div class="terms-of-service">
+        <ol>
+          <li>
+            <strong>Purpose:</strong> AgGRU-Check is provided for research and educational
+            purposes only.
+          </li>
+          <li>
+            <strong>No Warranty:</strong> The service is provided "as is" without
+            any guarantees of accuracy or availability.
+          </li>
+          <li>
+            <strong>Usage Limits:</strong> Users are limited to 5 protein sequences
+            per query to ensure fair usage.
+          </li>
+          <li>
+            <strong>Data Privacy:</strong> We do not store or share submitted protein
+            sequences.
+          </li>
+          <li>
+            <strong>Citation:</strong> Users should cite the tool as specified in
+            the "about" section when used in publications.
+          </li>
+          <li>
+            <strong>Responsible Use:</strong> Users agree to use the tool responsibly
+            and not overwhelm the service.
+          </li>
+          <li>
+            <strong>Modifications:</strong> We reserve the right to modify or discontinue
+            the service at any time.
+          </li>
+          <li>
+            <strong>Liability:</strong> We are not liable for any damages or losses
+            resulting from the use of AgGRU-Check.
+          </li>
+          <li>
+            <strong>Agreement:</strong> By using AgGRU-Check, you agree to these
+            terms.
+          </li>
+        </ol>
+      </div>
+    </Modal>
+  {/if}
+
   <form method="POST" action="/predict" on:submit={handleFormSubmission}>
     <textarea
       name="sequences"
@@ -191,7 +237,7 @@ Enter up to 5 protein sequences
         isNewInput = true;
       }}
     />
-    <button type="submit">Submit</button>
+    <button type="submit">Infer</button>
   </form>
 </section>
 
@@ -214,7 +260,9 @@ Enter up to 5 protein sequences
     align-items: center;
     padding: 0.5em;
     margin: 1em;
-    background-color: slategray;
+    background: linear-gradient(163deg, #ffd166, #ef476f, #118ab2, #073b4c);
+    background-size: 300% 300%;
+    animation: headerGradient 120s ease infinite;
     border-radius: 7px;
     opacity: 0.9;
     z-index: 2;
@@ -225,7 +273,17 @@ Enter up to 5 protein sequences
       gap: 1em;
     }
   }
-
+  @keyframes headerGradient {
+    0% {
+      background-position: 0% 83%;
+    }
+    50% {
+      background-position: 100% 16%;
+    }
+    100% {
+      background-position: 0% 83%;
+    }
+  }
   .about {
     &__link {
       all: unset;
@@ -253,7 +311,6 @@ Enter up to 5 protein sequences
     text-align: center;
     padding: 0.25em;
     margin: 0.25em;
-    background-color: slategray;
   }
 
   section {
@@ -275,7 +332,9 @@ Enter up to 5 protein sequences
 
   button {
     height: 2rem;
-    background-color: slategray;
+    background: linear-gradient(163deg, #ef476f, #118ab2, #073b4c);
+    background-size: 300% 300%;
+    animation: headerGradient 120s ease infinite;
     color: white;
     user-select: text;
   }
@@ -319,5 +378,42 @@ Enter up to 5 protein sequences
     overflow-x: auto;
     white-space: pre-wrap;
     word-wrap: break-word;
+  }
+
+  .terms-of-service {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    border-top: 2px solid #3498db;
+
+    ol {
+      counter-reset: item;
+      padding-left: 0;
+    }
+
+    li {
+      display: block;
+      margin-bottom: 15px;
+      position: relative;
+      padding-left: 35px;
+
+      &:before {
+        content: counter(item) ".";
+        counter-increment: item;
+        position: absolute;
+        left: 0;
+        top: 0;
+        font-weight: bold;
+        color: #3498db;
+      }
+
+      strong {
+        color: #2c3e50;
+        font-weight: 600;
+      }
+    }
   }
 </style>
