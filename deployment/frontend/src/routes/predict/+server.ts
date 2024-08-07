@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
   return produce(async ({ emit }) => {
     try {
       const payload = { sequenceList };
-
+      console.log("api url", API_URL);
       const response = await fetch(`${API_URL}/api/predict`, {
         method: "POST",
         headers: {

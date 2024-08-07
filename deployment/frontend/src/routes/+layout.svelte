@@ -3,6 +3,7 @@
   import Matter from "matter-js";
   import { tweened } from "svelte/motion";
   import { expoOut } from "svelte/easing";
+  import { browser } from "$app/environment";
 
   let engine;
   let render;
@@ -224,11 +225,13 @@
     }
   }
 
+  let handleResize;
+
   onMount(() => {
     initializeMatterJs();
 
     // Adjust the canvas size and blobs on window resize with debounce
-    const handleResize = debounce(() => {
+    handleResize = debounce(() => {
       if (render && render.canvas) {
         render.canvas.width = window.innerWidth;
         render.canvas.height = window.innerHeight;
@@ -274,11 +277,11 @@
         Matter.Runner.run(engine);
       }
     };
+  });
 
-    onDestroy(() => {
-      window.removeEventListener("resize", handleResize);
-      destroyMatterJs();
-    });
+  onDestroy(() => {
+    destroyMatterJs();
+    if (browser) window.removeEventListener("resize", handleResize);
   });
 
   const calculateNumDroplets = (width, height) => {

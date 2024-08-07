@@ -136,7 +136,7 @@ Enter up to 5 protein sequences
           <ul style="margin:1em">
             <li>
               <i>What's the output?</i> <br />A likelihood whether the input
-              protein is amyloidogenic; between 0 and 1. High is "probably
+              protein is amyloidogenic—between 0 and 1. High is "probably
               amyloid" while low is "maybe not".
             </li>
             <li>
@@ -241,7 +241,7 @@ Enter up to 5 protein sequences
       background-color: white;
       color: black;
       border-radius: 7px;
-      opacity: 0.9;
+      opacity: 1;
       z-index: 10;
       user-select: text;
     }
