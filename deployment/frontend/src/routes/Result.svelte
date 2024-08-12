@@ -18,7 +18,7 @@
   <div class="sequence">{sequence}</div>
   {#each sortedModels as { model, confidence }, i}
     <div class="model-container">
-      <div class="model-label">Model {Number(model) + 1}:</div>
+      <div class="model-label">Model {Number(model.split("_")[1]) + 1}:</div>
       <div class="bar-container">
         <div
           class="confidence-bar"
