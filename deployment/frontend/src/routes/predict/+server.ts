@@ -34,27 +34,56 @@ export const POST: RequestHandler = async ({ request }) => {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder("utf-8");
+      let buffer = "";
 
       async function pushData() {
-        const { done, value } = await reader.read();
-        if (done) {
-          return;
-        }
-        const lines = decoder.decode(value, { stream: true }).split("\n\n");
-        for (const line of lines) {
-          if (line.trim()) {
-            const [eventType, data] = line.split("\n");
-            if (eventType === "event: end") {
-              emit("end");
-              return;
-            } else if (data && data.startsWith("data: ")) {
-              const jsonData = JSON.parse(data.slice(6));
-              console.log("Received data:", jsonData);
-              emit("message", jsonData);
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (buffer.trim()) {
+              processChunk(buffer);
             }
+            emit("end");
+            return;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          console.log("Received chunk:", chunk); // Add this line
+          buffer += chunk;
+          const lines = buffer.split("\n\n");
+          buffer = lines.pop() || ""; // Keep the last incomplete chunk in the buffer
+
+          for (const line of lines) {
+            processChunk(line);
+          }
+
+          await pushData();
+        } catch (error) {
+          console.error("Error in pushData:", error);
+        }
+      }
+
+      function processChunk(chunk) {
+        console.log("Raw chunk received:", chunk);
+        if (chunk.trim()) {
+          if (chunk.startsWith("event: end")) {
+            console.log("Received end event");
+            emit("message", "end");
+          } else if (chunk.startsWith("data: ")) {
+            try {
+              const jsonString = chunk.slice(6).trim();
+              console.log("Attempting to parse JSON:", jsonString);
+              const jsonData = JSON.parse(jsonString);
+              console.log("Received data:", jsonData);
+              emit("message", JSON.stringify(jsonData));
+            } catch (error) {
+              console.error("Error parsing JSON:", error);
+              console.error("Problematic chunk:", chunk);
+            }
+          } else {
+            console.log("Unexpected chunk format:", chunk);
           }
         }
-        await pushData();
       }
 
       await pushData();

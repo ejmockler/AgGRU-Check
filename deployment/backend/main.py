@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 import os
 
 from fastapi.encoders import jsonable_encoder
@@ -51,9 +53,13 @@ async def startup_event():
     tokenizer = get_tokenizer(split)
     app.package = {"ensemble": ensemble, "vocab": vocab, "tokenizer": tokenizer}
 
+import asyncio
+import logging
+
 @app.post("/api/predict")
 async def do_predict(request: Request):
     data = await request.json()
+    logging.info(f"Received request with data: {data}")
 
     try:
         validated_data = ProteinInput(sequences=data["sequenceList"])
@@ -63,6 +69,7 @@ async def do_predict(request: Request):
     async def predict_stream():
         for sequence in validated_data.sequences:
             sequence = sequence.upper()
+            logging.info(f"Processing sequence: {sequence}")
             sequenceVector = [
                 app.package["vocab"][token]
                 for token in app.package["tokenizer"](sequence)
@@ -77,8 +84,12 @@ async def do_predict(request: Request):
 
             for future in asyncio.as_completed(prediction_tasks):
                 index, prediction = await future
-                yield f"data: {jsonable_encoder({f'model_{index}': prediction.item(), 'sequence': sequence})}\n\n"
-        
+                result = f"data: {json.dumps({f'model_{index}': prediction.item(), 'sequence': sequence})}\n\n"
+                logging.info(f"Yielding result: {result}")
+                yield result
+
+        # Add a small delay before sending the end event
+        await asyncio.sleep(0.1)
         yield "event: end\n\n"
 
     return StreamingResponse(predict_stream(), media_type="text/event-stream")

@@ -12,7 +12,9 @@
   let processedSequences = new Set();
   let results = [];
 
-  function handleFormSubmission(event) {
+  let eventSourceConnection;
+
+  async function handleFormSubmission(event) {
     event.preventDefault();
 
     const formData = new FormData(event.target);
@@ -26,54 +28,71 @@
 
       const actionUrl = event.target.action;
 
-      eventSourceValue = source(actionUrl, {
+      console.log("Sending request to:", actionUrl);
+      console.log("Payload:", payload);
+
+      if (eventSourceConnection) {
+        eventSourceConnection.close();
+      }
+
+      eventSourceConnection = source(actionUrl, {
         options: {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
         },
-      }).select("message");
+      });
 
-      eventSourceValue.subscribe((value) => {
-        if (value.includes("data: end") || value.includes("event: end")) {
+      const messageStore = eventSourceConnection.select("message");
+
+      const unsubscribe = messageStore.subscribe((message) => {
+        console.log("Received message:", message);
+
+        if (message === "end") {
+          console.log("Received end event");
+          eventSourceConnection.close();
           return;
         }
-        const jsonData = value
-          .replace(/^data: /, "")
-          .replace(/'/g, '"')
-          .trim();
+
+        if (!message || message.trim() === "") {
+          console.log("Received empty message, skipping");
+          return;
+        }
 
         try {
-          console.log(jsonData);
-          const parsedData = JSON.parse(jsonData);
-          processedSequences.add(parsedData.sequence);
-          output += JSON.stringify(parsedData) + "\n";
-
-          // Parse results and group them by sequence
-          const sequence = parsedData.sequence;
-          const models = Object.keys(parsedData)
-            .filter((key) => key.startsWith("model_"))
-            .map((key) => ({
-              model: key.split("_")[1],
-              confidence: parsedData[key],
-            }));
-
-          // Add to results array
-          const existingSequence = results.find(
-            (result) => result.sequence === sequence
-          );
-          if (existingSequence) {
-            existingSequence.models.push(...models);
-          } else {
-            results = [...results, { sequence, models }];
-          }
+          const parsedData = JSON.parse(message);
+          console.log("Parsed data:", parsedData);
+          processData(parsedData);
         } catch (error) {
-          console.error("Failed to parse JSON:", error);
+          console.error("Failed to parse JSON:", error, "Data:", message);
         }
       });
+
       isNewInput = false;
       previousInput = sequences;
+    }
+  }
+
+  function processData(parsedData) {
+    processedSequences = new Set([...processedSequences, parsedData.sequence]);
+
+    const sequence = parsedData.sequence;
+    const model = Object.keys(parsedData).find((key) =>
+      key.startsWith("model_")
+    );
+    const confidence = parsedData[model];
+
+    const existingSequenceIndex = results.findIndex(
+      (result) => result.sequence === sequence
+    );
+
+    if (existingSequenceIndex !== -1) {
+      results[existingSequenceIndex].models.push({ model, confidence });
+      results = [...results]; // Trigger Svelte reactivity
+    } else {
+      results = [...results, { sequence, models: [{ model, confidence }] }];
     }
   }
 
