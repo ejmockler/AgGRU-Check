@@ -79,7 +79,7 @@ async def do_predict(request: Request):
                 index, prediction = await future
                 yield f"data: {jsonable_encoder({f'model_{index}': prediction.item(), 'sequence': sequence})}\n\n"
         
-        yield "event: end\ndata: end\n\n"
+        yield "event: end\n\n"
 
     return StreamingResponse(predict_stream(), media_type="text/event-stream")
 

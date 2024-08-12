@@ -216,12 +216,12 @@
         destroyMatterJs();
         initializeMatterJs();
         fadeCanvasIn();
-        isPaused = false;
+        isPlaying = true;
       });
     } else {
       Matter.Runner.stop(engine);
       Matter.Render.stop(render);
-      isPaused = true;
+      isPlaying = false;
     }
   }
 
@@ -240,7 +240,7 @@
       fadeCanvasOut(() => {
         destroyMatterJs();
         initializeMatterJs();
-        if (isPaused) {
+        if (!isPlaying) {
           Matter.Render.stop(render);
           Matter.Runner.stop(engine);
         }
@@ -258,7 +258,7 @@
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         handleResize();
-        if (!isPaused) {
+        if (!!isPlaying) {
           resumeEngine();
         }
       }, 350);
@@ -395,7 +395,7 @@
   };
 </script>
 
-<main style="height: 100vh">
+<main>
   <div id="canvas-container" class="canvas-container"></div>
   <button class="play-pause" on:click={toggleEngine}>
     <span class="icon" class:play={!isPlaying} class:pause={isPlaying}></span>
@@ -435,12 +435,10 @@
   }
 
   main {
-    min-height: 100%;
-    position: relative;
     overflow: scroll;
-    margin: 0;
+    margin: auto;
     padding: 0;
-    display: contents;
+    margin: auto;
   }
 
   .canvas-container {

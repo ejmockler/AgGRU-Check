@@ -32,19 +32,26 @@ export const POST: RequestHandler = async ({ request }) => {
         body: JSON.stringify(payload),
       });
 
-      const reader = response.body.getReader();
+      const reader = response.body?.getReader();
       const decoder = new TextDecoder("utf-8");
 
       async function pushData() {
         const { done, value } = await reader.read();
         if (done) {
-          emit("end", "end");
           return;
         }
-        const lines = decoder.decode(value, { stream: true }).split("\n");
+        const lines = decoder.decode(value, { stream: true }).split("\n\n");
         for (const line of lines) {
           if (line.trim()) {
-            emit("message", line);
+            const [eventType, data] = line.split("\n");
+            if (eventType === "event: end") {
+              emit("end");
+              return;
+            } else if (data && data.startsWith("data: ")) {
+              const jsonData = JSON.parse(data.slice(6));
+              console.log("Received data:", jsonData);
+              emit("message", jsonData);
+            }
           }
         }
         await pushData();
@@ -53,6 +60,7 @@ export const POST: RequestHandler = async ({ request }) => {
       await pushData();
     } catch (error) {
       console.error("SSE Production error:", error);
+      emit("error", error);
     }
   });
 };

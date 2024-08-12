@@ -23,7 +23,6 @@
         sequences,
         processedSequences: Array.from(processedSequences),
       };
-      console.log("Sending data:", payload);
 
       const actionUrl = event.target.action;
 
@@ -40,19 +39,16 @@
         if (value.includes("data: end") || value.includes("event: end")) {
           return;
         }
-        console.log(value);
         const jsonData = value
           .replace(/^data: /, "")
           .replace(/'/g, '"')
           .trim();
 
-        console.log("Received data:", jsonData);
         try {
+          console.log(jsonData);
           const parsedData = JSON.parse(jsonData);
           processedSequences.add(parsedData.sequence);
-          console.log("Received prediction:", parsedData);
           output += JSON.stringify(parsedData) + "\n";
-          console.log(processedSequences.entries());
 
           // Parse results and group them by sequence
           const sequence = parsedData.sequence;
@@ -72,7 +68,6 @@
           } else {
             results = [...results, { sequence, models }];
           }
-          console.log("Results:", results);
         } catch (error) {
           console.error("Failed to parse JSON:", error);
         }
@@ -109,8 +104,6 @@ Enter up to 5 protein sequences
     document.removeEventListener("click", handleClickOutside);
   }
 
-  $: console.log(activeModal);
-
   onDestroy(() => {
     if (browser) {
       document.removeEventListener("click", handleClickOutside);
@@ -119,54 +112,55 @@ Enter up to 5 protein sequences
 </script>
 
 <section>
-  <div class="header">
-    <div class="header__links">
-      <button class="about__link" on:click={() => toggleModal("about")}
-        >about</button
-      >
-      <button class="about__link" on:click={() => toggleModal("terms")}
-        >terms</button
-      >
-      <a
-        href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
-        target="_blank"
-        class="about__link">github</a
-      >
+  <div class="hero">
+    <div class="header">
+      <div class="header__links">
+        <button class="about__link" on:click={() => toggleModal("about")}
+          >about</button
+        >
+        <button class="about__link" on:click={() => toggleModal("terms")}
+          >terms</button
+        >
+        <a
+          href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
+          target="_blank"
+          class="about__link">github</a
+        >
+      </div>
+
+      <h1>AgGRU? Check:</h1>
     </div>
 
-    <h1>AgGRU? Check:</h1>
-  </div>
+    {#if activeModal === "about"}
+      <Modal title="AgGRU-Check" on:close={() => (activeModal = null)}>
+        <p>Classify aggregation-prone proteins, via gated recurrent units</p>
+        <ul style="margin:1em">
+          <li>
+            <i>What's the output?</i> <br />A likelihood whether the input
+            protein is amyloidogenic—between 0 and 1. High is "probably amyloid"
+            while low is "maybe not".
+          </li>
+          <li>
+            <i>How does it work?</i> <br />The model is a recurrent neural
+            network, trained on a dataset of known amyloidogenic proteins.
+          </li>
+          <li>
+            <i>Where can I learn more?</i> <br /> Check out the
 
-  {#if activeModal === "about"}
-    <Modal title="AgGRU-Check" on:close={() => (activeModal = null)}>
-      <p>Classify aggregation-prone proteins, via gated recurrent units</p>
-      <ul style="margin:1em">
-        <li>
-          <i>What's the output?</i> <br />A likelihood whether the input protein
-          is amyloidogenic—between 0 and 1. High is "probably amyloid" while low
-          is "maybe not".
-        </li>
-        <li>
-          <i>How does it work?</i> <br />The model is a recurrent neural
-          network, trained on a dataset of known amyloidogenic proteins.
-        </li>
-        <li>
-          <i>Where can I learn more?</i> <br /> Check out the
+            <a
+              href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
+              target="_blank">GitHub</a
+            >
+            and
 
-          <a
-            href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
-            target="_blank">GitHub</a
-          >
-          and
-
-          <a
-            href="https://github.com/ejmockler/AgGRU-Check/blob/main/details.pdf"
-            target="_blank">technical paper</a
-          > to run this model for yourself & read more about this implementation.
-        </li>
-        <li>
-          <i>Can I cite this?</i>
-          <pre class="citation">
+            <a
+              href="https://github.com/ejmockler/AgGRU-Check/blob/main/details.pdf"
+              target="_blank">technical paper</a
+            > to run this model for yourself & read more about this implementation.
+          </li>
+          <li>
+            <i>Can I cite this?</i>
+            <pre class="citation">
 @misc&#123;
   ejmockler2024aggrucheck,
   author = &#123;Eric Jing Mockler&#125;,
@@ -176,82 +170,87 @@ Enter up to 5 protein sequences
   doi = &#123;10.5281/zenodo.13147167&#125;,
 &#125;
           </pre>
-        </li>
-      </ul>
-    </Modal>
-  {/if}
+          </li>
+        </ul>
+      </Modal>
+    {/if}
 
-  {#if activeModal === "terms"}
-    <Modal title="Terms of Use" on:close={() => (activeModal = null)}>
-      <div class="terms-of-service">
-        <ol>
-          <li>
-            <strong>Purpose:</strong> AgGRU-Check is provided for research and educational
-            purposes only.
-          </li>
-          <li>
-            <strong>No Warranty:</strong> The service is provided "as is" without
-            any guarantees of accuracy or availability.
-          </li>
-          <li>
-            <strong>Usage Limits:</strong> Users are limited to 5 protein sequences
-            per query to ensure fair usage.
-          </li>
-          <li>
-            <strong>Data Privacy:</strong> We do not store or share submitted protein
-            sequences.
-          </li>
-          <li>
-            <strong>Citation:</strong> Users should cite the tool as specified in
-            the "about" section when used in publications.
-          </li>
-          <li>
-            <strong>Responsible Use:</strong> Users agree to use the tool responsibly
-            and not overwhelm the service.
-          </li>
-          <li>
-            <strong>Modifications:</strong> We reserve the right to modify or discontinue
-            the service at any time.
-          </li>
-          <li>
-            <strong>Liability:</strong> We are not liable for any damages or losses
-            resulting from the use of AgGRU-Check.
-          </li>
-          <li>
-            <strong>Agreement:</strong> By using AgGRU-Check, you agree to these
-            terms.
-          </li>
-        </ol>
-      </div>
-    </Modal>
-  {/if}
+    {#if activeModal === "terms"}
+      <Modal title="Terms of Use" on:close={() => (activeModal = null)}>
+        <div class="terms-of-service">
+          <ol>
+            <li>
+              <strong>Purpose:</strong> AgGRU-Check is provided for research and
+              educational purposes only.
+            </li>
+            <li>
+              <strong>No Warranty:</strong> The service is provided "as is" without
+              any guarantees of accuracy or availability.
+            </li>
+            <li>
+              <strong>Usage Limits:</strong> Users are limited to 5 protein sequences
+              per query to ensure fair usage.
+            </li>
+            <li>
+              <strong>Data Privacy:</strong> We do not store or share submitted protein
+              sequences.
+            </li>
+            <li>
+              <strong>Citation:</strong> Users should cite the tool as specified
+              in the "about" section when used in publications.
+            </li>
+            <li>
+              <strong>Responsible Use:</strong> Users agree to use the tool responsibly
+              and not overwhelm the service.
+            </li>
+            <li>
+              <strong>Modifications:</strong> We reserve the right to modify or discontinue
+              the service at any time.
+            </li>
+            <li>
+              <strong>Liability:</strong> We are not liable for any damages or losses
+              resulting from the use of AgGRU-Check.
+            </li>
+            <li>
+              <strong>Agreement:</strong> By using AgGRU-Check, you agree to these
+              terms.
+            </li>
+          </ol>
+        </div>
+      </Modal>
+    {/if}
 
-  <form method="POST" action="/predict" on:submit={handleFormSubmission}>
-    <textarea
-      name="sequences"
-      aria-label={inputMessage}
-      placeholder={inputMessage}
-      minlength="3"
-      required
-      on:input={() => {
-        isNewInput = true;
-      }}
-    />
-    <button type="submit">Infer</button>
-  </form>
+    <form method="POST" action="/predict" on:submit={handleFormSubmission}>
+      <textarea
+        name="sequences"
+        aria-label={inputMessage}
+        placeholder={inputMessage}
+        minlength="3"
+        required
+        on:input={() => {
+          isNewInput = true;
+        }}
+      />
+      <button type="submit">Infer</button>
+    </form>
+  </div>
+
+  <ul class="results">
+    {#each results as result, index}
+      <Result
+        sequence={result.sequence}
+        models={result.models}
+        count={index + 1}
+      />
+    {/each}
+  </ul>
 </section>
 
-<ul class="results">
-  {#each results as result, index}
-    <Result
-      sequence={result.sequence}
-      models={result.models}
-      count={index + 1}
-    />
-  {/each}
-</ul>
-
 <style lang="scss">
+  .hero {
+    position: relative;
+    margin-top: 25vh;
+  }
   .header {
     display: flex;
     position: relative;
@@ -264,7 +263,7 @@ Enter up to 5 protein sequences
     background-size: 300% 300%;
     animation: headerGradient 120s ease infinite;
     border-radius: 7px;
-    opacity: 0.9;
+    opacity: 0.7;
     z-index: 2;
     &__links {
       display: flex;
@@ -315,12 +314,10 @@ Enter up to 5 protein sequences
 
   section {
     z-index: 1;
-    margin: 25vh 0 2vh;
-    display: flex;
+    display: block;
+    margin: auto;
     position: relative;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    width: 50%;
   }
 
   form {
@@ -343,7 +340,6 @@ Enter up to 5 protein sequences
     font-family: "Courier New", Courier, monospace;
     font-size: calc(7pt + 0.5vw + 0.5vh);
     min-height: 20vh;
-    min-width: 60vw;
     color: black;
     background-color: whitesmoke;
     border: 5px solid skyblue;
@@ -359,8 +355,10 @@ Enter up to 5 protein sequences
     gap: 1rem;
     z-index: 1;
     opacity: 0.9;
-    padding-left: 0;
-    margin-bottom: 1em;
+    padding: 1em 0;
+    position: relative;
+    left: 0;
+    right: 0;
 
     & .results {
       margin: 1em;
