@@ -3,7 +3,7 @@
   import { source } from "sveltekit-sse";
   import Result from "./Result.svelte";
   import { browser } from "$app/environment";
-  import Modal from "./Modal.svelte"; // Assume we create this component
+  import Modal from "./Modal.svelte";
 
   let output = "";
   let eventSourceValue;
@@ -11,6 +11,7 @@
   let previousInput: FormDataEntryValue;
   let processedSequences = new Set();
   let results = [];
+  let isLoading = false;
 
   let eventSourceConnection;
 
@@ -21,15 +22,24 @@
     const sequences = formData.get("sequences");
 
     if (sequences !== previousInput) {
+      isLoading = true;
+
+      const sequenceList = sequences
+        .split("\n")
+        .filter((seq) => seq.trim() !== "");
+
+      results = sequenceList.map((sequence, index) => ({
+        sequence: sequence.toLocaleUpperCase(),
+        models: [], // Start with an empty array for models
+        error: null, // No error initially
+      }));
+
       const payload = {
         sequences,
         processedSequences: Array.from(processedSequences),
       };
 
       const actionUrl = event.target.action;
-
-      console.log("Sending request to:", actionUrl);
-      console.log("Payload:", payload);
 
       if (eventSourceConnection) {
         eventSourceConnection.close();
@@ -48,22 +58,35 @@
       const messageStore = eventSourceConnection.select("message");
 
       const unsubscribe = messageStore.subscribe((message) => {
-        console.log("Received message:", message);
+        if (message.startsWith('{"error":')) {
+          const errorData = JSON.parse(message).error;
+          const sequence = extractSequenceFromError(errorData);
+
+          const errorIndex = results.findIndex(
+            (result) => result.sequence === sequence
+          );
+
+          if (errorIndex !== -1) {
+            results[errorIndex].error = errorData;
+            isLoading = false;
+            results = [...results]; // Trigger reactivity
+          }
+          return;
+        }
 
         if (message === "end") {
-          console.log("Received end event");
+          isLoading = false;
           eventSourceConnection.close();
+          unsubscribe();
           return;
         }
 
         if (!message || message.trim() === "") {
-          console.log("Received empty message, skipping");
           return;
         }
 
         try {
           const parsedData = JSON.parse(message);
-          console.log("Parsed data:", parsedData);
           processData(parsedData);
         } catch (error) {
           console.error("Failed to parse JSON:", error, "Data:", message);
@@ -75,9 +98,12 @@
     }
   }
 
-  function processData(parsedData) {
-    processedSequences = new Set([...processedSequences, parsedData.sequence]);
+  function extractSequenceFromError(errorData) {
+    const match = errorData.match(/input_value='(\w+)'/);
+    return match ? match[1].toUpperCase() : "";
+  }
 
+  function processData(parsedData) {
     const sequence = parsedData.sequence;
     const model = Object.keys(parsedData).find((key) =>
       key.startsWith("model_")
@@ -89,16 +115,15 @@
     );
 
     if (existingSequenceIndex !== -1) {
-      results[existingSequenceIndex].models.push({ model, confidence });
+      const existingResult = results[existingSequenceIndex];
+      existingResult.models.push({ model, confidence });
       results = [...results]; // Trigger Svelte reactivity
-    } else {
-      results = [...results, { sequence, models: [{ model, confidence }] }];
     }
   }
 
   const inputMessage = `Is your protein amyloidgenic?
 
-Enter up to 5 protein sequences 
+Enter up to 5 amino acid sequences 
 (either raw, FASTA or FASTQ)`;
 
   let activeModal = null;
@@ -165,13 +190,11 @@ Enter up to 5 protein sequences
           </li>
           <li>
             <i>Where can I learn more?</i> <br /> Check out the
-
             <a
               href="https://github.com/ejmockler/AgGRU-Check?tab=readme-ov-file"
               target="_blank">GitHub</a
             >
             and
-
             <a
               href="https://github.com/ejmockler/AgGRU-Check/blob/main/details.pdf"
               target="_blank">technical paper</a
@@ -188,7 +211,7 @@ Enter up to 5 protein sequences
   publisher = &#123;Zenodo&#125;,
   doi = &#123;10.5281/zenodo.13147167&#125;,
 &#125;
-          </pre>
+            </pre>
           </li>
         </ul>
       </Modal>
@@ -252,17 +275,19 @@ Enter up to 5 protein sequences
       />
       <button type="submit">Infer</button>
     </form>
-  </div>
 
-  <ul class="results">
-    {#each results as result, index}
-      <Result
-        sequence={result.sequence}
-        models={result.models}
-        count={index + 1}
-      />
-    {/each}
-  </ul>
+    <ul class="results">
+      {#each results as result, index}
+        <Result
+          sequence={result.sequence}
+          models={result.models}
+          count={index + 1}
+          error={result.error}
+          {isLoading}
+        />
+      {/each}
+    </ul>
+  </div>
 </section>
 
 <style lang="scss">

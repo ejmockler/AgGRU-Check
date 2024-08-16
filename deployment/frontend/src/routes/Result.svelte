@@ -1,37 +1,51 @@
 <script>
   export let sequence;
-  export let models;
+  export let models = []; // Ensure models is at least an empty array
   export let count;
+  export let isLoading = false;
+  export let error = null;
 
-  // Function to get color based on confidence level
   const getColor = (confidence) => {
-    const hue = confidence * 120; // 0 is red, 120 is green
+    const hue = confidence * 120;
     return `hsl(${hue}, 100%, 50%)`;
   };
 
-  // Sort models by confidence in descending order
-  $: sortedModels = models.sort((a, b) => b.confidence - a.confidence);
+  // Only sort models if there's no error and models are available
+  $: sortedModels = error
+    ? []
+    : models.sort((a, b) => b.confidence - a.confidence);
 </script>
 
-<div class="result-container">
+<div
+  class="result-container {isLoading ? 'loading' : ''}"
+  style={error ? "border-color: red; width: fit-content" : ""}
+>
   <span class="count">{count}</span>
-  <div class="sequence">{sequence}</div>
-  {#each sortedModels as { model, confidence }, i}
-    <div class="model-container">
-      <div class="model-label">Model {Number(model.split("_")[1]) + 1}:</div>
-      <div class="bar-container">
-        <div
-          class="confidence-bar"
-          style="width: {confidence * 100}%; background-color: {getColor(
-            confidence
-          )};"
-        ></div>
-        <div class="confidence-label">
-          {(confidence * 100).toFixed(1)}%
+  {#if error}
+    <div class="error-message">{error}</div>
+  {:else}
+    <div class="sequence">{isLoading ? "Loading..." : sequence}</div>
+    {#each sortedModels as { model, confidence }, i}
+      <div class="model-container">
+        <div class="model-label">Model {Number(model.split("_")[1]) + 1}:</div>
+        <div class="bar-container">
+          {#if isLoading}
+            <div class="loading-bar"></div>
+          {:else}
+            <div
+              class="confidence-bar"
+              style="width: {confidence * 100}%; background-color: {getColor(
+                confidence
+              )};"
+            ></div>
+            <div class="confidence-label">
+              {(confidence * 100).toFixed(1)}%
+            </div>
+          {/if}
         </div>
       </div>
-    </div>
-  {/each}
+    {/each}
+  {/if}
 </div>
 
 <style>
@@ -43,6 +57,10 @@
     position: relative;
     width: 300px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .result-container.loading {
+    opacity: 0.7;
   }
 
   .sequence {
@@ -107,5 +125,27 @@
     font-size: 0.8em;
     font-weight: bold;
     text-shadow: 0 0 2px white;
+  }
+
+  .loading-bar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+  }
+
+  .error-message {
+    color: red;
+    font-weight: bold;
+  }
+
+  @keyframes loading {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 </style>

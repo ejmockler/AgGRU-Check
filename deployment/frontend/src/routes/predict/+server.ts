@@ -8,12 +8,9 @@ export const POST: RequestHandler = async ({ request }) => {
   const sequences = data.sequences;
 
   // Split the input into individual sequences
-  console.log(data);
   const sequenceList = splitSequences(sequences).filter(
     (seq) => !data.processedSequences.includes(seq.toLocaleUpperCase())
   );
-
-  console.log("sequenceList", sequenceList);
 
   if (sequenceList.length === 0) {
     return json({ error: "No sequences provided" }, { status: 400 });
@@ -69,6 +66,10 @@ export const POST: RequestHandler = async ({ request }) => {
           if (chunk.startsWith("event: end")) {
             console.log("Received end event");
             emit("message", "end");
+          } else if (chunk.startsWith("event: error")) {
+            const errorData = chunk.slice(chunk.indexOf("data: ") + 6).trim();
+            const error = { error: errorData };
+            emit("message", JSON.stringify(error));
           } else if (chunk.startsWith("data: ")) {
             try {
               const jsonString = chunk.slice(6).trim();
@@ -128,5 +129,10 @@ function splitSequences(sequences: string): Array<string> {
     return sequences.split(/\r?\n/).filter((seq) => seq.trim().length > 0);
   }
 
+  for (let i = 0; i < result.length; i++) {
+    result[i] = result[i].replace(/\s/g, "");
+    console.log(result[i]);
+  }
+  console.log(result);
   return result;
 }
