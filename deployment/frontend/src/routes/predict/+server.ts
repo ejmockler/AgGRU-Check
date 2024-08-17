@@ -61,29 +61,28 @@ export const POST: RequestHandler = async ({ request }) => {
       }
 
       function processChunk(chunk) {
-        console.log("Raw chunk received:", chunk);
-        if (chunk.trim()) {
-          if (chunk.startsWith("event: end")) {
-            console.log("Received end event");
-            emit("message", "end");
-          } else if (chunk.startsWith("event: error")) {
-            const errorData = chunk.slice(chunk.indexOf("data: ") + 6).trim();
-            const error = { error: errorData };
-            emit("message", JSON.stringify(error));
-          } else if (chunk.startsWith("data: ")) {
-            try {
+        try {
+          console.log("Raw chunk received:", chunk);
+          if (chunk.trim()) {
+            if (chunk.startsWith("event: end")) {
+              console.log("Received end event");
+              emit("message", "end");
+            } else if (chunk.startsWith("event: error")) {
+              const errorData = chunk.slice(chunk.indexOf("data: ") + 6).trim();
+              const error = { error: errorData };
+              emit("message", JSON.stringify(error));
+            } else if (chunk.startsWith("data: ")) {
               const jsonString = chunk.slice(6).trim();
               console.log("Attempting to parse JSON:", jsonString);
               const jsonData = JSON.parse(jsonString);
               console.log("Received data:", jsonData);
-              emit("message", JSON.stringify(jsonData));
-            } catch (error) {
-              console.error("Error parsing JSON:", error);
-              console.error("Problematic chunk:", chunk);
+              emit("message", JSON.stringify(jsonData)); // Process data as normal
+            } else {
+              console.log("Unexpected chunk format:", chunk);
             }
-          } else {
-            console.log("Unexpected chunk format:", chunk);
           }
+        } catch (error) {
+          console.error("Error processing chunk:", error);
         }
       }
 
@@ -103,36 +102,37 @@ export const POST: RequestHandler = async ({ request }) => {
  */
 function splitSequences(sequences: string): Array<string> {
   const lines = sequences.split(/\r?\n/);
-  let currentSequence = [];
-  const result = [];
+  let currentBlock: string[] = [];
+  const sequenceBlocks: string[] = [];
   let isFastaFastq = false;
 
-  lines.forEach((line) => {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    // Detect start of a new FASTA/FASTQ block
     if (line.startsWith(">") || line.startsWith("@")) {
-      isFastaFastq = true;
-      if (currentSequence.length > 0) {
-        result.push(currentSequence.join("\n"));
-        currentSequence = [];
+      if (currentBlock.length > 0) {
+        sequenceBlocks.push(currentBlock.join("\n"));
+        currentBlock = [];
       }
-    } else if (isFastaFastq && line.startsWith("+")) {
-      currentSequence.push(line);
-      return;
+      isFastaFastq = true;
     }
-    currentSequence.push(line);
-  });
 
-  if (currentSequence.length > 0) {
-    result.push(currentSequence.join("\n"));
+    currentBlock.push(line);
+
+    // Handle FASTQ '+' line and its corresponding quality scores line
+    if (isFastaFastq && line.startsWith("+")) {
+      // Include the next line as the quality scores
+      if (i + 1 < lines.length) {
+        currentBlock.push(lines[++i].trim());
+      }
+    }
   }
 
-  if (!isFastaFastq) {
-    return sequences.split(/\r?\n/).filter((seq) => seq.trim().length > 0);
+  // Push the last block if any
+  if (currentBlock.length > 0) {
+    sequenceBlocks.push(currentBlock.join("\n"));
   }
 
-  for (let i = 0; i < result.length; i++) {
-    result[i] = result[i].replace(/\s/g, "");
-    console.log(result[i]);
-  }
-  console.log(result);
-  return result;
+  return sequenceBlocks;
 }

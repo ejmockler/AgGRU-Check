@@ -2,18 +2,23 @@
   export let sequence;
   export let models = []; // Ensure models is at least an empty array
   export let count;
-  export let isLoading = false;
+  export let isLoading = false; // This is now a per-result loading state
   export let error = null;
+
+  const modelNames = ["model_0", "model_1", "model_2"];
 
   const getColor = (confidence) => {
     const hue = confidence * 120;
     return `hsl(${hue}, 100%, 50%)`;
   };
 
-  // Only sort models if there's no error and models are available
-  $: sortedModels = error
-    ? []
-    : models.sort((a, b) => b.confidence - a.confidence);
+  // Populate a default loading state for models
+  $: modelPlaceholders = modelNames.map((modelName, index) => {
+    const modelData = models.find((m) => m.model === modelName);
+    return modelData
+      ? { ...modelData }
+      : { model: modelName, confidence: null, loading: true };
+  });
 </script>
 
 <div
@@ -24,12 +29,12 @@
   {#if error}
     <div class="error-message">{error}</div>
   {:else}
-    <div class="sequence">{isLoading ? "Loading..." : sequence}</div>
-    {#each sortedModels as { model, confidence }, i}
+    <div class="sequence">{sequence}</div>
+    {#each modelPlaceholders as { model, confidence, loading }, i}
       <div class="model-container">
         <div class="model-label">Model {Number(model.split("_")[1]) + 1}:</div>
         <div class="bar-container">
-          {#if isLoading}
+          {#if loading}
             <div class="loading-bar"></div>
           {:else}
             <div

@@ -5,10 +5,9 @@
   import { browser } from "$app/environment";
   import Modal from "./Modal.svelte";
 
-  let output = "";
-  let eventSourceValue;
   let isNewInput = true;
   let previousInput: FormDataEntryValue;
+  let sequenceInput: HTMLTextAreaElement;
   let processedSequences = new Set();
   let results = [];
   let isLoading = false;
@@ -22,16 +21,15 @@
     const sequences = formData.get("sequences");
 
     if (sequences !== previousInput) {
-      isLoading = true;
+      // Remove the global isLoading and make it specific to each result
+      const sequenceList = splitSequences(sequences);
 
-      const sequenceList = sequences
-        .split("\n")
-        .filter((seq) => seq.trim() !== "");
-
-      results = sequenceList.map((sequence, index) => ({
-        sequence: sequence.toLocaleUpperCase(),
-        models: [], // Start with an empty array for models
-        error: null, // No error initially
+      // Initialize results array with isLoading set to true for each result
+      results = sequenceList.map((sequence) => ({
+        sequence: sequence,
+        models: [],
+        error: null,
+        isLoading: true, // Each result starts with loading state true
       }));
 
       const payload = {
@@ -60,36 +58,19 @@
       const unsubscribe = messageStore.subscribe((message) => {
         if (message.startsWith('{"error":')) {
           const errorData = JSON.parse(message).error;
-          const sequence = extractSequenceFromError(errorData);
-
-          const errorIndex = results.findIndex(
-            (result) => result.sequence === sequence
-          );
-
-          if (errorIndex !== -1) {
-            results[errorIndex].error = errorData;
-            isLoading = false;
-            results = [...results]; // Trigger reactivity
-          }
-          return;
-        }
-
-        if (message === "end") {
-          isLoading = false;
+          processError(errorData);
+        } else if (message === "end") {
+          // Handle the end of the stream
+          results.forEach((result) => (result.isLoading = false));
           eventSourceConnection.close();
           unsubscribe();
-          return;
-        }
-
-        if (!message || message.trim() === "") {
-          return;
-        }
-
-        try {
-          const parsedData = JSON.parse(message);
-          processData(parsedData);
-        } catch (error) {
-          console.error("Failed to parse JSON:", error, "Data:", message);
+        } else if (message && message.trim() !== "") {
+          try {
+            const parsedData = JSON.parse(message);
+            processData(parsedData);
+          } catch (error) {
+            console.error("Failed to parse JSON:", error, "Data:", message);
+          }
         }
       });
 
@@ -98,32 +79,106 @@
     }
   }
 
-  function extractSequenceFromError(errorData) {
-    const match = errorData.match(/input_value='(\w+)'/);
-    return match ? match[1].toUpperCase() : "";
+  function sanitizeSequence(sequence: string): string {
+    return sequence.replace(/\s+/g, "").toLocaleUpperCase(); // Remove all whitespace and convert to uppercase
   }
 
   function processData(parsedData) {
-    const sequence = parsedData.sequence;
-    const model = Object.keys(parsedData).find((key) =>
+    const modelKey = Object.keys(parsedData).find((key) =>
       key.startsWith("model_")
     );
-    const confidence = parsedData[model];
+    const confidence = parsedData[modelKey];
+    const sequence = parsedData.sequence?.toLocaleUpperCase(); // Ensure sequence is in uppercase for comparison
 
-    const existingSequenceIndex = results.findIndex(
-      (result) => result.sequence === sequence
-    );
+    if (sequence) {
+      // Find the latest result whose sequence contains the sanitized server-returned sequence
+      const resultIndex = results.findIndex((result) =>
+        sanitizeSequence(result.sequence).includes(sequence)
+      );
 
-    if (existingSequenceIndex !== -1) {
-      const existingResult = results[existingSequenceIndex];
-      existingResult.models.push({ model, confidence });
-      results = [...results]; // Trigger Svelte reactivity
+      if (resultIndex !== -1) {
+        const existingResult = results[resultIndex];
+
+        // Add the model result to the result models array
+        existingResult.models.push({ model: modelKey, confidence });
+
+        // Mark this specific result as loaded
+        existingResult.isLoading = false;
+
+        results = [...results]; // Trigger reactivity
+      }
+    } else {
+      // If no sequence is provided, handle it as an error or update the first result with no error
+      const fallbackIndex = results.findIndex(
+        (result) => result.error === null && result.models.length === 0
+      );
+
+      if (fallbackIndex !== -1) {
+        const fallbackResult = results[fallbackIndex];
+        fallbackResult.models.push({ model: modelKey, confidence });
+        fallbackResult.isLoading = false;
+        results = [...results]; // Trigger reactivity
+      } else {
+        console.error("No valid result found to update");
+      }
+    }
+  }
+
+  function splitSequences(sequences: string): Array<string> {
+    const lines = sequences.split(/\r?\n/);
+    let currentBlock: string[] = [];
+    const sequenceBlocks: string[] = [];
+    let isFastaFastq = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Detect start of a new FASTA/FASTQ block
+      if (line.startsWith(">") || line.startsWith("@")) {
+        if (currentBlock.length > 0) {
+          sequenceBlocks.push(currentBlock.join("\n"));
+          currentBlock = [];
+        }
+        isFastaFastq = true;
+      }
+
+      currentBlock.push(line);
+
+      // Handle FASTQ '+' line and its corresponding quality scores line
+      if (isFastaFastq && line.startsWith("+")) {
+        // Include the next line as the quality scores
+        if (i + 1 < lines.length) {
+          currentBlock.push(lines[++i].trim());
+        }
+      }
+    }
+
+    // Push the last block if any
+    if (currentBlock.length > 0) {
+      sequenceBlocks.push(currentBlock.join("\n"));
+    }
+
+    return sequenceBlocks;
+  }
+
+  function appendFastaToTextarea(fastaContent: string) {
+    if (sequenceInput) {
+      const currentValue = sequenceInput.value.trim();
+
+      // Check if the content already exists
+      if (!currentValue.includes(fastaContent)) {
+        const newValue = currentValue
+          ? `${currentValue}\n${fastaContent}`
+          : fastaContent;
+        sequenceInput.value = newValue;
+        isNewInput = true; // Mark the input as new
+      }
     }
   }
 
   const inputMessage = `Is your protein amyloidgenic?
 
-Enter up to 5 amino acid sequences 
+Enter up to 15 amino acid sequences 
 (either raw, FASTA or FASTQ)`;
 
   let activeModal = null;
@@ -173,6 +228,29 @@ Enter up to 5 amino acid sequences
       </div>
 
       <h1>AgGRU? Check:</h1>
+
+      <div class="link-container">
+        <a
+          href="#"
+          class="fasta-link"
+          on:click={() =>
+            appendFastaToTextarea(
+              ">TDP-43 Amyloid Domain (318-343)\nINPAMMAAAQAALKSSWGMMGMLASQ"
+            )}
+        >
+          TDP-43 (amyloid domain)
+        </a>
+        <a
+          href="#"
+          class="fasta-link"
+          on:click={() =>
+            appendFastaToTextarea(
+              ">MOTS-c (short mitochondrial protein)\nMRWQEMGYIFYPRKLR"
+            )}
+        >
+          MOTS-c (short mitochondrial protein)
+        </a>
+      </div>
     </div>
 
     {#if activeModal === "about"}
@@ -182,7 +260,9 @@ Enter up to 5 amino acid sequences
           <li>
             <i>What's the output?</i> <br />A likelihood whether the input
             protein is amyloidogenic—between 0 and 1. High is "probably amyloid"
-            while low is "maybe not".
+            while low is "maybe not". Likelihoods are provided in triplicate
+            across an ensemble of 3 models—each model has been trained on a
+            different slice of data.
           </li>
           <li>
             <i>How does it work?</i> <br />The model is a recurrent neural
@@ -265,6 +345,7 @@ Enter up to 5 amino acid sequences
     <form method="POST" action="/predict" on:submit={handleFormSubmission}>
       <textarea
         name="sequences"
+        bind:this={sequenceInput}
         aria-label={inputMessage}
         placeholder={inputMessage}
         minlength="3"
@@ -334,6 +415,11 @@ Enter up to 5 amino acid sequences
       text-decoration: underline;
       cursor: pointer;
     }
+
+    &__link:hover {
+      color: white;
+    }
+
     &__modal {
       position: absolute;
       top: 0;
@@ -354,6 +440,8 @@ Enter up to 5 amino acid sequences
     text-align: center;
     padding: 0.25em;
     margin: 0.25em;
+    margin-bottom: 0.1em;
+    padding-bottom: 0;
   }
 
   section {
@@ -388,6 +476,22 @@ Enter up to 5 amino acid sequences
     background-color: whitesmoke;
     border: 5px solid skyblue;
     opacity: 0.8;
+  }
+
+  .link-container {
+    text-align: center;
+
+    .fasta-link {
+      color: gainsboro;
+      text-decoration: underline;
+      cursor: pointer;
+      margin: 0.2em;
+      display: inline-block;
+
+      &:hover {
+        color: white;
+      }
+    }
   }
 
   ul {

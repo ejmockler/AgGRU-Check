@@ -1,5 +1,7 @@
 # AgGRU-Check
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13147167.svg)](https://doi.org/10.5281/zenodo.13147167)
+
 Gated recurrent units classify amyloidogenic proteins
 
 A paper detailing motivations, methods & findings is available in [details.pdf](details.pdf).
