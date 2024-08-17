@@ -178,8 +178,8 @@
 
   const inputMessage = `Is your protein amyloidgenic?
 
-Enter up to 15 amino acid sequences 
-(either raw, FASTA or FASTQ)`;
+Enter up to 5 amino acid sequences
+(either raw or FASTA/FASTQ)`;
 
   let activeModal = null;
 
@@ -235,7 +235,7 @@ Enter up to 15 amino acid sequences
           class="fasta-link"
           on:click={() =>
             appendFastaToTextarea(
-              ">TDP-43 Amyloid Domain (318-343)\nINPAMMAAAQAALKSSWGMMGMLASQ"
+              ">TDP-43 (amyloid domain) [318-343]\nINPAMMAAAQAALKSSWGMMGMLASQ"
             )}
         >
           TDP-43 (amyloid domain)
@@ -267,6 +267,11 @@ Enter up to 15 amino acid sequences
           <li>
             <i>How does it work?</i> <br />The model is a recurrent neural
             network, trained on a dataset of known amyloidogenic proteins.
+          </li>
+          <li>
+            <i>It's stuck loading?</i> <br />If the server doesn't wake up in 10
+            seconds or so, input a shorter protein (or test parts of it at a
+            time) to impute amyloid domains.
           </li>
           <li>
             <i>Where can I learn more?</i> <br /> Check out the
@@ -498,7 +503,6 @@ Enter up to 15 amino acid sequences
     display: flex;
     flex-wrap: wrap;
     flex-direction: row;
-    justify-content: center;
     align-items: center;
     gap: 1rem;
     z-index: 1;
@@ -507,10 +511,11 @@ Enter up to 15 amino acid sequences
     position: relative;
     left: 0;
     right: 0;
+  }
 
-    & .results {
-      margin: 1em;
-    }
+  .results {
+    margin: 1em;
+    justify-content: center;
   }
 
   .citation {
