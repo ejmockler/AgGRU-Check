@@ -436,6 +436,8 @@
 
   main {
     overflow: scroll;
+    height: calc(100vh);
+    width: calc(100vw);
     margin: auto;
     padding: 0;
     margin: auto;
@@ -443,6 +445,7 @@
 
   .canvas-container {
     position: absolute;
+    display: block;
     top: 0;
     left: 0;
     width: 100%;
