@@ -393,7 +393,6 @@ Enter up to 5 amino acid sequences
     background-size: 300% 300%;
     animation: headerGradient 120s ease infinite;
     border-radius: 7px;
-    opacity: 0.7;
     z-index: 2;
     &__links {
       display: flex;
@@ -480,7 +479,7 @@ Enter up to 5 amino acid sequences
     color: black;
     background-color: whitesmoke;
     border: 5px solid skyblue;
-    opacity: 0.8;
+    opacity: 0.9;
   }
 
   .link-container {
