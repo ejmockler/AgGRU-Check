@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --config deployment/backend/fly.toml --build-arg BUILDKIT_INLINE_CACHE=1
+      - working-directory: deployment/backend
+        run: flyctl deploy --remote-only --dockerfile Dockerfile --build-arg BUILDKIT_INLINE_CACHE=1 -a aggru-check
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

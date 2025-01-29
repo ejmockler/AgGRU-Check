@@ -14,17 +14,15 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies:
-# We copy just the requirements.txt first to leverage Docker cache
-COPY deployment/backend/requirements.txt ./
-# Force reinstall torch and torchtext to ensure proper compilation
+# Copy all backend files directly to /app
+COPY . .
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Then, copy the rest of the files
-COPY . .
 # Expose the port the app runs in
 EXPOSE 8080
 EXPOSE 80
 
-# Specify the command to run
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--timeout", "300", "--reload", "main:app"]
+# Specify the command to run with logging configuration
+CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--timeout", "300", "--reload", "--log-config", "log.ini", "main:app"]
