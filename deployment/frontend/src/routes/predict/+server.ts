@@ -3,96 +3,249 @@ import { json } from "@sveltejs/kit";
 import { API_URL } from "$env/static/private";
 import type { RequestHandler } from "./$types";
 
+interface ModelPrediction {
+  model_0?: number;
+  model_1?: number;
+  model_2?: number;
+  sequence?: string;
+}
+
+// Define the structure for saliency results
+interface SaliencyResult {
+  position: number;
+  saliency: number;
+  confidence: number;
+  activeWindows?: WindowResult[]; // Track windows affecting this position
+  sequence?: string;
+  sequence_index?: number;
+  models_completed?: number;
+  total_models?: number;
+}
+
+// Define structure for model progress
+interface ModelProgress {
+  sequence_index: number;
+  model_index: number;
+  models_completed: number;
+  total_models: number;
+}
+
+// Add new interfaces
+interface WindowResult {
+  start: number;
+  end: number;
+  score: number;
+  significance: number;
+  consistency: number;
+}
+
+interface WindowMessage {
+  type: 'window_result';
+  sequence_index: number;
+  model_index: number;
+  window: WindowResult;
+}
+
+// Custom JSON parser that handles NaN
+function parseJSON(text: string) {
+  return JSON.parse(text.replace(/:\s*NaN\b/g, ': null'));
+}
+
 export const POST: RequestHandler = async ({ request }) => {
   const data = await request.json();
   const sequences = data.sequences;
-
-  // Split the input into individual sequences
+  
   const sequenceList = splitSequences(sequences).filter(
     (seq) => !data.processedSequences.includes(seq.toLocaleUpperCase())
   );
+
+  console.log("Processing sequences:", {
+    originalInput: sequences,
+    splitSequences: sequenceList,
+    count: sequenceList.length
+  });
 
   if (sequenceList.length === 0) {
     return json({ error: "No sequences provided" }, { status: 400 });
   }
 
-  // Start the SSE production
   return produce(async ({ emit }) => {
+    // Initialize a map to hold current results for each sequence index
+    const allCurrentResults = new Map<number, SaliencyResult[]>();
+    // Track model completion for each sequence
+    const sequenceProgress = new Map<number, ModelProgress>();
+
     try {
-      const payload = { sequenceList };
-      console.log("api url", API_URL);
       const response = await fetch(`${API_URL}/api/predict`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sequenceList }),
       });
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
+      if (!response.ok) {
+        throw new Error(`Prediction failed: ${response.statusText}`);
+      }
 
-      async function pushData() {
-        try {
-          const { done, value } = await reader.read();
-          if (done) {
-            if (buffer.trim()) {
-              processChunk(buffer);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              // Use parseJSON instead of JSON.parse
+              const resultData = parseJSON(line.slice(6));
+
+              if (resultData.type === 'position_result') {
+                const { sequence_index, position, saliency, confidence, sequence } = resultData;
+                
+                // Handle null/NaN saliency
+                const validSaliency = saliency === null ? 0 : saliency;
+
+                // Initialize results array for this sequence if needed
+                if (!allCurrentResults.has(sequence_index)) {
+                  // Use the cleaned sequence length instead of raw sequence
+                  const cleanSequence = extractSequence(sequence);
+                  const sequenceLength = cleanSequence.length;
+                  
+                  allCurrentResults.set(sequence_index, new Array(sequenceLength).fill(null).map((_, idx) => ({
+                    position: idx,
+                    saliency: 0,
+                    confidence: 0,
+                    activeWindows: [],
+                    sequence_index,
+                  })));
+                }
+
+                // Update the result for this position
+                const currentResults = allCurrentResults.get(sequence_index)!;
+                currentResults[position] = {
+                  position,
+                  saliency: validSaliency,
+                  confidence,
+                  activeWindows: [],
+                  sequence_index,
+                };
+
+                // Emit progress update with partial results
+                emit("message", JSON.stringify({
+                  type: 'progress',
+                  sequence,
+                  sequence_index,
+                  partialResults: currentResults.map(res => ({
+                    position: res.position,
+                    score: res.saliency,
+                    confidence: res.confidence,
+                  })),
+                  models_completed: resultData.models_completed,
+                  total_models: resultData.total_models,
+                }));
+
+              } else if (resultData.type === 'model_complete') {
+                // Update sequence progress
+                sequenceProgress.set(resultData.sequence_index, resultData);
+                
+                // Emit progress update
+                emit("message", JSON.stringify({
+                  type: 'model_progress',
+                  ...resultData
+                }));
+              } else if (resultData.type === 'window_result') {
+                const { sequence_index, model_index, window } = resultData;
+                
+                // Get existing results array if it exists
+                const currentResults = allCurrentResults.get(sequence_index);
+                if (currentResults) {  // Only process if we have already initialized results for this sequence
+                  // Update positions affected by this window
+                  for (let pos = window.start; pos < window.end; pos++) {
+                    if (!currentResults[pos].activeWindows) {
+                      currentResults[pos].activeWindows = [];
+                    }
+                    currentResults[pos].activeWindows.push(window);
+                  }
+
+                  // Emit progress update with window information
+                  emit("message", JSON.stringify({
+                    type: 'window_progress',
+                    sequence_index,
+                    model_index,
+                    window,
+                    partialResults: currentResults.map(res => ({
+                      position: res.position,
+                      score: res.saliency,
+                      confidence: res.confidence,
+                      activeWindows: res.activeWindows,
+                    })),
+                  }));
+                }
+              }
+
+            } catch (e) {
+              console.warn('Failed to parse data line:', line, e);
             }
-            emit("end");
+          } else if (line.startsWith('event: end')) {
+            // Send final results for all sequences
+            for (const [sequence_index, results] of allCurrentResults.entries()) {
+              emit("message", JSON.stringify({
+                type: 'result',
+                sequence: sequenceList[sequence_index],
+                sequence_index,
+                results: results.map(res => ({
+                  position: res.position,
+                  score: res.saliency,
+                  confidence: res.confidence,
+                })),
+              }));
+            }
+            emit("message", "end");
+            return;
+          } else if (line.startsWith('event: error')) {
+            const errorData = line.slice(13);
+            emit("message", JSON.stringify({
+              type: 'error',
+              error: errorData
+            }));
+            emit("message", "end");
             return;
           }
-
-          const chunk = decoder.decode(value, { stream: true });
-          console.log("Received chunk:", chunk); // Add this line
-          buffer += chunk;
-          const lines = buffer.split("\n\n");
-          buffer = lines.pop() || ""; // Keep the last incomplete chunk in the buffer
-
-          for (const line of lines) {
-            processChunk(line);
-          }
-
-          await pushData();
-        } catch (error) {
-          console.error("Error in pushData:", error);
         }
       }
 
-      function processChunk(chunk) {
-        try {
-          console.log("Raw chunk received:", chunk);
-          if (chunk.trim()) {
-            if (chunk.startsWith("event: end")) {
-              console.log("Received end event");
-              emit("message", "end");
-            } else if (chunk.startsWith("event: error")) {
-              const errorData = chunk.slice(chunk.indexOf("data: ") + 6).trim();
-              const error = { error: errorData };
-              emit("message", JSON.stringify(error));
-            } else if (chunk.startsWith("data: ")) {
-              const jsonString = chunk.slice(6).trim();
-              console.log("Attempting to parse JSON:", jsonString);
-              const jsonData = JSON.parse(jsonString);
-              console.log("Received data:", jsonData);
-              emit("message", JSON.stringify(jsonData)); // Process data as normal
-            } else {
-              console.log("Unexpected chunk format:", chunk);
-            }
-          }
-        } catch (error) {
-          console.error("Error processing chunk:", error);
-        }
-      }
-
-      await pushData();
     } catch (error) {
       console.error("SSE Production error:", error);
-      emit("error", error);
+      emit("message", JSON.stringify({
+        type: 'error',
+        error: error instanceof Error ? error.message : "An unexpected error occurred"
+      }));
+      emit("message", "end");
     }
   });
 };
+
+function extractSequence(input: string): string {
+  const lines = input.split(/\r?\n/);
+
+  // If FASTA format, remove header and join sequence lines
+  if (lines[0].startsWith('>')) {
+    return lines.slice(1).join('').replace(/\s+/g, '');
+  }
+
+  // If FASTQ format, return just the sequence line
+  if (lines[0].startsWith('@') && lines.length >= 4) {
+    return lines[1].trim();
+  }
+
+  // Otherwise, clean up and return the raw sequence
+  return input.replace(/\s+/g, '');
+}
 
 /**
  * Split input sequences into a list of sequences, preserving headers and sequences together.

@@ -1,10 +1,11 @@
 fastapi
 pydantic
 python-dotenv
-pytorch_lightning
+pytorch-lightning
 sse_starlette
-torch
-torchtext
+torch==2.0.1
+torchtext==0.15.2
+torchdata==0.6.1
 uvicorn
 gunicorn
 numpy==1.26.4

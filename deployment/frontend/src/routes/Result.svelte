@@ -1,156 +1,209 @@
-<script>
-  export let sequence;
-  export let models = []; // Ensure models is at least an empty array
-  export let count;
-  export let isLoading = false; // This is now a per-result loading state
-  export let error = null;
+<script lang="ts">
+  import type { PositionResult } from '$lib/types';
+  import SequenceVisualizer from '$lib/components/SequenceVisualizer.svelte';
+  import { fade } from 'svelte/transition';
 
-  const modelNames = ["model_0", "model_1", "model_2"];
+  export let sequence: string; // Expecting full sequence (with header if present)
+  export let results: PositionResult[] = [];
+  export let count: number;
+  export let error: string | null = null;
+  export let isLoading = false;
+  export let progress: { 
+    position: number; 
+    totalLength: number;
+    models_completed: number;
+    total_models: number;
+  } | undefined = undefined;
 
-  const getColor = (confidence) => {
-    const hue = confidence * 120;
-    return `hsl(${hue}, 100%, 50%)`;
-  };
+  // Parse FASTA header if present
+  $: {
+    const lines = sequence.split(/\r?\n/);
+    const hasFastaHeader = lines[0].startsWith('>');
+    header = hasFastaHeader ? lines[0].slice(1).trim() : null;
+    cleanSequence = hasFastaHeader ? lines.slice(1).join('\n') : sequence;
+  }
 
-  // Populate a default loading state for models
-  $: modelPlaceholders = modelNames.map((modelName, index) => {
-    const modelData = models.find((m) => m.model === modelName);
-    return modelData
-      ? { ...modelData }
-      : { model: modelName, confidence: null, loading: true };
-  });
+  let header: string | null = null;
+  let cleanSequence: string;
 </script>
 
-<div
-  class="result-container {isLoading ? 'loading' : ''}"
-  style={error ? "border-color: red; width: fit-content" : ""}
->
-  <span class="count">{count}</span>
-  {#if error}
-    <div class="error-message">{error}</div>
-  {:else}
-    <div class="sequence">{sequence}</div>
-    {#each modelPlaceholders as { model, confidence, loading }, i}
-      <div class="model-container">
-        <div class="model-label">Model {Number(model.split("_")[1]) + 1}:</div>
-        <div class="bar-container">
-          {#if loading}
-            <div class="loading-bar"></div>
+<div class="result-card">
+  <div class="result-header">
+    {#if header}
+      <h3>{header}</h3>
+    {:else}
+      <h3>Sequence {count}</h3>
+    {/if}
+    {#if error}
+      <div class="error-message">{error}</div>
+    {/if}
+  </div>
+
+  <div class="result-content">
+    {#if isLoading}
+      <div class="progress-bar">
+        <div class="progress-text" transition:fade|local={{ duration: 200 }}>
+          {#if progress}
+            Processing with model {progress.models_completed} of {progress.total_models}
           {:else}
-            <div
-              class="confidence-bar"
-              style="width: {confidence * 100}%; background-color: {getColor(
-                confidence
-              )};"
-            ></div>
-            <div class="confidence-label">
-              {(confidence * 100).toFixed(1)}%
-            </div>
+            Initializing analysis...
           {/if}
         </div>
+        <div class="progress-track">
+          <div 
+            class="progress-fill"
+            class:progress-indeterminate={!progress}
+            style={progress ? `width: ${(progress.models_completed / progress.total_models * 100)}%` : undefined}
+          />
+        </div>
       </div>
-    {/each}
-  {/if}
+    {/if}
+
+    <SequenceVisualizer
+      sequence={cleanSequence}
+      results={results}
+      {isLoading}
+    />
+
+  </div>
 </div>
 
-<style>
-  .result-container {
-    padding: 1em;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: #f9f9f9;
+<style lang="scss">
+  .result-card {
     position: relative;
-    width: 300px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .result-container.loading {
-    opacity: 0.7;
-  }
-
-  .sequence {
-    font-weight: bold;
-    font-size: 1.2em;
-    margin-bottom: 1em;
-    max-width: 100%;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .count {
-    position: absolute;
-    top: -10px;
-    left: -10px;
-    background-color: #007bff;
-    color: white;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 0.9em;
-  }
-
-  .model-container {
-    display: flex;
-    align-items: center;
-    margin-bottom: 0.75em;
-  }
-
-  .model-label {
-    font-size: 0.9em;
-    width: 80px;
-    white-space: nowrap;
-  }
-
-  .bar-container {
-    flex-grow: 1;
-    height: 20px;
-    background-color: #e0e0e0;
-    border-radius: 10px;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .confidence-bar {
-    height: 100%;
-    transition:
-      width 0.3s ease,
-      background-color 0.3s ease;
-  }
-
-  .confidence-label {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 0.8em;
-    font-weight: bold;
-    text-shadow: 0 0 2px white;
-  }
-
-  .loading-bar {
-    height: 100%;
+    z-index: 1;
+    padding: 1.5rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     width: 100%;
-    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1a2b3b;
+      margin: 0;
+      word-break: break-word;
+      max-width: 100%;
+    }
+  }
+
+  .result-content {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    isolation: isolate;
+    overflow: visible;
   }
 
   .error-message {
-    color: red;
-    font-weight: bold;
+    color: #ef4444;
+    font-weight: 500;
+    font-size: 0.875rem;
   }
 
-  @keyframes loading {
+  .legend {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    
+    .gradient-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
+      
+      .gradient-bar {
+        height: 16px;
+        border-radius: 4px;
+        background: linear-gradient(
+          to right,
+          rgba(22, 163, 74, 1),    // Brighter green
+          rgba(22, 163, 74, 1) 30%, // Hold green longer
+          rgba(234, 179, 8, 1) 40%, // Bright yellow
+          rgba(234, 179, 8, 1) 60%, // Hold yellow
+          rgba(220, 38, 38, 1) 70%, // Bright red
+          rgba(220, 38, 38, 1) 100% // Hold red
+        );
+        box-shadow: 
+          0 2px 4px rgba(0, 0, 0, 0.1),
+          0 0 0 1px rgba(0, 0, 0, 0.05);
+      }
+      
+      .gradient-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        color: #1a2b3b;
+        padding: 0 2px;
+      }
+    }
+    
+    .legend-label {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: #1a2b3b;
+      text-align: center;
+    }
+  }
+
+  .progress-bar {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+
+    .progress-text {
+      font-size: 0.875rem;
+      color: #1a2b3b;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    .progress-track {
+      height: 4px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+
+      .progress-fill {
+        height: 100%;
+        background: #2A9D8F;
+        transition: width 0.3s ease;
+
+        &.progress-indeterminate {
+          width: 30%;
+          animation: indeterminate 1.5s ease-in-out infinite;
+        }
+      }
+    }
+  }
+
+  @keyframes indeterminate {
     0% {
-      background-position: 200% 0;
+      transform: translateX(-100%);
     }
     100% {
-      background-position: -200% 0;
+      transform: translateX(400%);
     }
   }
 </style>

@@ -1,9 +1,11 @@
-<script>
+<script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Matter from "matter-js";
   import { tweened } from "svelte/motion";
   import { expoOut } from "svelte/easing";
   import { browser } from "$app/environment";
+  import { fade } from 'svelte/transition';
+  import { animationsPaused } from '$lib/stores/animation';
 
   let engine;
   let render;
@@ -17,7 +19,7 @@
   const blobMargin = 100; // Margin from the walls to ensure no overlap
 
   let resizeTimeout;
-  let isPlaying = true;
+  let tooltipVisible = false;
 
   // Tweened store for engine time scale
   const timeScale = tweened(1, {
@@ -25,10 +27,12 @@
     easing: expoOut,
   });
 
+  // Update body class when animation state changes
+  $: if (browser) {
+    document.body.classList.toggle('paused', $animationsPaused);
+  }
+
   function initializeMatterJs() {
-    // Calculate exclusion zone radius
-    exclusionZoneRadius =
-      Math.min(window.innerWidth, window.innerHeight) * 0.25;
     // Calculate initial number of droplets based on viewport size
     numDroplets = calculateNumDroplets(window.innerWidth, window.innerHeight);
 
@@ -37,10 +41,10 @@
     world = engine.world;
 
     // Adjust engine parameters for better stability
-    timeScale.set(0.2);
-    engine.positionIterations = 20;
-    engine.velocityIterations = 20;
-    engine.constraintIterations = 20;
+    timeScale.set(0.15);  // Slower overall movement
+    engine.positionIterations = 12;  // Fewer iterations = less jitter
+    engine.velocityIterations = 8;   // Reduced velocity solving
+    engine.constraintIterations = 4;  // Fewer constraint solves = softer bodies
 
     // Disable gravity
     engine.world.gravity.y = 0;
@@ -106,19 +110,6 @@
               y: -repulsionForce,
             });
           }
-
-          // Repulsive force from exclusion zone
-          const dx = body.position.x - window.innerWidth / 2;
-          const dy = body.position.y - window.innerHeight / 2;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance < exclusionZoneRadius) {
-            const exclusionForceMagnitude =
-              repulsionForce * (1 - distance / exclusionZoneRadius);
-            Matter.Body.applyForce(body, body.position, {
-              x: (dx / distance) * exclusionForceMagnitude,
-              y: (dy / distance) * exclusionForceMagnitude,
-            });
-          }
         });
       });
 
@@ -139,7 +130,7 @@
                 const distanceSq = dx * dx + dy * dy;
                 if (distanceSq > 0) {
                   const forceMagnitude =
-                    (attractionStrength * body1.mass * body2.mass) / distanceSq;
+                    (attractionStrength * body1.mass * body2.mass) / Math.sqrt(distanceSq);  // Linear falloff instead of square
                   Matter.Body.applyForce(body1, body1.position, {
                     x: (dx / Math.sqrt(distanceSq)) * forceMagnitude,
                     y: (dy / Math.sqrt(distanceSq)) * forceMagnitude,
@@ -156,8 +147,17 @@
     fadeCanvasIn();
 
     // Run the Matter.js engine and renderer
-    Matter.Engine.run(engine);
-    Matter.Render.run(render);
+    let runner = Matter.Runner.create();
+    
+    function runAnimation() {
+      if (!$animationsPaused) {
+        Matter.Engine.update(engine, 1000 / 60);
+        Matter.Render.world(render);
+      }
+      requestAnimationFrame(runAnimation);
+    }
+    
+    runAnimation();
   }
 
   function destroyMatterJs() {
@@ -209,19 +209,17 @@
   }
 
   function toggleEngine() {
-    isPlaying = !isPlaying;
+    $animationsPaused = !$animationsPaused;
     const checkbox = document.querySelector("#play-pause");
-    if (isPlaying) {
+    if (!$animationsPaused) {
       fadeCanvasOut(() => {
         destroyMatterJs();
         initializeMatterJs();
         fadeCanvasIn();
-        isPlaying = true;
       });
     } else {
       Matter.Runner.stop(engine);
       Matter.Render.stop(render);
-      isPlaying = false;
     }
   }
 
@@ -240,7 +238,7 @@
       fadeCanvasOut(() => {
         destroyMatterJs();
         initializeMatterJs();
-        if (!isPlaying) {
+        if (!$animationsPaused) {
           Matter.Render.stop(render);
           Matter.Runner.stop(engine);
         }
@@ -258,7 +256,7 @@
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
         handleResize();
-        if (!!isPlaying) {
+        if (!!$animationsPaused) {
           resumeEngine();
         }
       }, 350);
@@ -290,9 +288,16 @@
   };
 
   const generateDroplets = (num) => {
+    const colors = [
+      'rgba(15, 118, 110, 0.5)',   // Primary teal
+      'rgba(30, 41, 59, 0.5)',     // Slate blue
+      'rgba(255, 164, 27, 0.5)',   // Warm orange
+      'rgba(255, 81, 81, 0.5)'     // Vibrant red
+    ];
+
     for (let i = blobs.length; i < num; i++) {
       const size = Math.random() * 50 + 30;
-      const color = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.7)`;
+      const color = colors[Math.floor(Math.random() * colors.length)];
 
       // Calculate random position outside the exclusion zone and walls
       let x, y, distance;
@@ -376,18 +381,27 @@
 
   const createSoftBody = (x, y, size, color) => {
     const particleOptions = {
-      friction: 0.5,
-      frictionAir: 0.1,
-      restitution: 0.3,
+      friction: 0.2,      // Less friction between particles
+      frictionAir: 0.05,  // Less air resistance
+      restitution: 0.1,   // Less bouncy
+      density: 0.001,     // Much lighter particles
       render: { fillStyle: color },
     };
-    const particles = Matter.Composites.stack(x, y, 3, 3, 10, 10, (x, y) =>
-      Matter.Bodies.circle(x, y, size / 6, particleOptions)
+
+    // Increase spacing between particles in the blob
+    const particles = Matter.Composites.stack(
+      x, y, 
+      3, 3, 
+      15, 15,  // More space between particles
+      (x, y) => Matter.Bodies.circle(x, y, size / 6, particleOptions)
     );
+
     const constraints = Matter.Composites.mesh(particles, 3, 3, false, {
-      stiffness: 0.05,
+      stiffness: 0.02,  // Softer connections = less jitter
+      damping: 0.1,     // Add damping to reduce oscillations
       render: { visible: false },
     });
+
     return Matter.Composite.create({
       bodies: particles.bodies,
       constraints: constraints.constraints,
@@ -397,13 +411,37 @@
 
 <main>
   <div id="canvas-container" class="canvas-container"></div>
-  <button class="play-pause" on:click={toggleEngine}>
-    <span class="icon" class:play={!isPlaying} class:pause={isPlaying}></span>
+  <button 
+    class="animation-control"
+    on:click={toggleEngine}
+    on:mouseenter={() => tooltipVisible = true}
+    on:mouseleave={() => tooltipVisible = false}
+    aria-label={$animationsPaused ? "Resume background animations" : "Pause background animations"}
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      {#if $animationsPaused}
+        <path d="M8 5v14l11-7z" />
+      {:else}
+        <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
+      {/if}
+    </svg>
   </button>
+  {#if tooltipVisible}
+    <div 
+      class="tooltip"
+      transition:fade={{ duration: 150 }}
+      role="tooltip"
+    >
+      {$animationsPaused ? 'Resume animations' : 'Pause animations'}
+    </div>
+  {/if}
   <slot />
 </main>
 
 <style lang="scss">
+  @import '$lib/styles/colors.scss';
+  @import '$lib/styles/glass.scss';
+
   :global(html) {
     font-family: "Gill Sans", "Gill Sans MT", Calibri, "Trebuchet MS",
       sans-serif;
@@ -414,6 +452,10 @@
     animation: backgroundSwoop 74s ease infinite;
     margin: 0;
     padding: 0;
+    
+    &.paused {
+      animation-play-state: paused;
+    }
   }
 
   :global(*) {
@@ -469,66 +511,60 @@
     outline: none;
   }
 
-  .play-pause {
+  .animation-control {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 50px;
-    height: 50px;
+    top: 1.5rem;
+    right: 1.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: color(secondary);
     cursor: pointer;
-    z-index: 1000;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.3s;
-    border: none;
-    padding: 0;
-
+    transition: all 0.2s;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 0.5rem;
+    
+    svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+    
     &:hover {
-      background-color: rgba(0, 0, 0, 0.7);
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+      color: color(primary);
     }
-
-    .icon {
-      position: relative;
-      width: 20px;
-      height: 20px;
+    
+    &:active {
+      transform: translateY(0);
     }
+  }
 
-    .play {
-      &::before {
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-30%, -50%);
-        width: 0;
-        height: 0;
-        border-style: solid;
-        border-width: 10px 0 10px 15px;
-        border-color: transparent transparent transparent white;
-      }
-    }
-
-    .pause {
-      &::before,
-      &::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        width: 6px;
-        height: 20px;
-        background-color: white;
-      }
-
-      &::before {
-        left: 0;
-      }
-
-      &::after {
-        right: 0;
-      }
+  .tooltip {
+    position: fixed;
+    top: 4.5rem;
+    right: 1.5rem;
+    background: rgba(26, 43, 59, 0.95);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    pointer-events: none;
+    z-index: 100;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      top: -4px;
+      right: 1.25rem;
+      width: 8px;
+      height: 8px;
+      background: inherit;
+      transform: rotate(45deg);
     }
   }
 </style>

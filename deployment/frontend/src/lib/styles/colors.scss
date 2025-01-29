@@ -1,0 +1,30 @@
+// Color system
+$colors: (
+  primary: #0F766E,
+  secondary: #1E293B,
+  accent: #FFA41B,
+  accent-alt: #FF5151,
+  surface: #FFFFFF,
+  background: #F8FAFC,
+  text: #1A2B3B,
+  border: #E2E8F0
+);
+
+// Opacity levels
+$opacity-levels: (
+  solid: 1,
+  high: 0.9,
+  medium: 0.8,
+  low: 0.5,
+  subtle: 0.25
+);
+
+// Color utilities
+@function color($key) {
+  @return map-get($colors, $key);
+}
+
+@function alpha($color, $opacity-key) {
+  $opacity: map-get($opacity-levels, $opacity-key);
+  @return rgba($color, $opacity);
+} 
