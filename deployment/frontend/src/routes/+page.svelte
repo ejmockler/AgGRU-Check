@@ -25,6 +25,11 @@
       models_completed: number;
       total_models: number;
     };
+    sequencePrediction?: {
+      is_amyloid: boolean;
+      prediction_score: number;
+      confidence: number;
+    };
   }[] = [];
   let isLoading = false;
 
@@ -123,8 +128,10 @@
                 // Update partial results with confidence
                 if (parsedData.partialResults) {
                   results[resultIndex].results = parsedData.partialResults.map(r => ({
-                    ...r,
-                    isUpdated: true // Mark as recently updated for animation
+                    position: r.position,
+                    score: r.score,
+                    confidence: r.confidence,
+                    isUpdated: true // Mark as recently updated
                   }));
                 }
                 results = [...results]; // Trigger reactivity
@@ -159,15 +166,85 @@
                 results = [...results];
               }
             } else if (parsedData.type === 'error') {
+              console.error("Client received error:", parsedData);
+              const errorText = parsedData.error || "An unknown error occurred.";
+              // Find the first result card to display the error, or create a new one
+              if (results.length > 0) {
+                results[0].error = errorText; // Display error in the first result card
+              } else {
+                results = [{
+                  sequence: "Error processing sequence",
+                  results: [],
+                  error: errorText,
+                  isLoading: false,
+                  sequence_index: 0, // Or some default index
+                  progress: undefined
+                }];
+              }
+              results = [...results]; // Trigger reactivity
+              isLoading = false;
+              eventSourceConnection.close(); // Close connection on error
+              unsubscribe(); // Unsubscribe from SSE
+            } else if (parsedData.type === 'window_progress') {
               const resultIndex = findMatchingSequenceIndex(results, parsedData.sequence_index);
               if (resultIndex !== -1) {
-                results[resultIndex].error = parsedData.error;
-                results[resultIndex].isLoading = false;
-                results = [...results];
+                // Update results with new window information
+                results[resultIndex].results = results[resultIndex].results.map(r => ({
+                  ...r,
+                  activeWindows: parsedData.activeWindows
+                }));
+                
+                // Update progress information
+                if (results[resultIndex].progress) {
+                  results[resultIndex].progress = {
+                    ...results[resultIndex].progress!,
+                    currentWindow: parsedData.window,
+                    model_index: parsedData.model_index
+                  };
+                }
+                
+                results = [...results]; // Trigger reactivity
+              }
+            } else if (parsedData.type === 'sequence_start') {
+              console.log("SSE Event: sequence_start", parsedData);
+              const sequenceIndex = parsedData.sequence_index;
+              const resultIndex = findMatchingSequenceIndex(results, sequenceIndex);
+              if (resultIndex !== -1) {
+                results[resultIndex].isLoading = true; // Ensure loading is set
+                results[resultIndex].error = null;    // Clear any previous errors
+                results[resultIndex].results = [];    // Clear previous results
+                results[resultIndex].progress = {     // Reset progress
+                  position: 0,
+                  totalLength: 0,
+                  models_completed: 0,
+                  total_models: parsedData.total_models
+                };
+                results = [...results]; // Trigger reactivity
+              }
+            } else if (parsedData.type === 'model_start') {
+              console.log("SSE Event: model_start", parsedData);
+              const sequenceIndex = parsedData.sequence_index;
+              const resultIndex = findMatchingSequenceIndex(results, sequenceIndex);
+              if (resultIndex !== -1 && results[resultIndex].progress) {
+                results[resultIndex].progress = {
+                  ...results[resultIndex].progress!,
+                  model_index: parsedData.model_index // Update model index in progress
+                };
+                results = [...results]; // Trigger reactivity
+              }
+            } else if (parsedData.type === 'sequence_prediction') {
+              const resultIndex = findMatchingSequenceIndex(results, parsedData.sequence_index);
+              if (resultIndex !== -1) {
+                results[resultIndex].sequencePrediction = {
+                  is_amyloid: parsedData.is_amyloid,
+                  prediction_score: parsedData.prediction_score,
+                  confidence: parsedData.confidence
+                };
+                results = [...results]; // Trigger reactivity
               }
             }
-          } catch (error) {
-            console.error("Failed to parse message:", error, "Data:", message);
+          } catch (e) {
+            console.warn('Failed to parse message:', message, e);
           }
         }
       });
@@ -368,6 +445,7 @@ Enter up to 5 amino acid sequences
               error={result.error}
               isLoading={result.isLoading}
               progress={result.progress}
+              sequencePrediction={result.sequencePrediction}
             />
           {/each}
         </div>

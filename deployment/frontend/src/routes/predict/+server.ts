@@ -16,10 +16,16 @@ interface SaliencyResult {
   saliency: number;
   confidence: number;
   activeWindows?: WindowResult[]; // Track windows affecting this position
+  activeDomains?: DomainResult[]; // Add domain tracking
   sequence?: string;
   sequence_index?: number;
   models_completed?: number;
   total_models?: number;
+  statistics?: {
+    q25: number;
+    q75: number;
+    iqr: number;
+  };
 }
 
 // Define structure for model progress
@@ -46,6 +52,23 @@ interface WindowMessage {
   window: WindowResult;
 }
 
+// Add new interfaces for domain results
+interface DomainResult {
+  start: number;
+  end: number;
+  peak_score: number;
+  mean_score: number;
+  confidence: number;
+  stability: number;
+}
+
+interface DomainMessage {
+  type: 'domain_result';
+  sequence_index: number;
+  model_index: number;
+  domains: DomainResult[];
+}
+
 // Custom JSON parser that handles NaN
 function parseJSON(text: string) {
   return JSON.parse(text.replace(/:\s*NaN\b/g, ': null'));
@@ -70,12 +93,18 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   return produce(async ({ emit }) => {
-    // Initialize a map to hold current results for each sequence index
+    // Initialize maps to track state
     const allCurrentResults = new Map<number, SaliencyResult[]>();
-    // Track model completion for each sequence
     const sequenceProgress = new Map<number, ModelProgress>();
+    const cleanedSequences = new Map<number, string>();
 
     try {
+      for (let i = 0; i < sequenceList.length; i++) {
+        const sequence = sequenceList[i];
+        const cleanSequence = extractSequence(sequence);
+        cleanedSequences.set(i, cleanSequence);
+      }
+
       const response = await fetch(`${API_URL}/api/predict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,19 +130,23 @@ export const POST: RequestHandler = async ({ request }) => {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              // Use parseJSON instead of JSON.parse
               const resultData = parseJSON(line.slice(6));
+              console.log("SSE Data:", resultData); // Log all SSE data
 
               if (resultData.type === 'position_result') {
-                const { sequence_index, position, saliency, confidence, sequence } = resultData;
+                const { sequence_index, position, saliency, confidence } = resultData;
                 
                 // Handle null/NaN saliency
                 const validSaliency = saliency === null ? 0 : saliency;
 
                 // Initialize results array for this sequence if needed
                 if (!allCurrentResults.has(sequence_index)) {
-                  // Use the cleaned sequence length instead of raw sequence
-                  const cleanSequence = extractSequence(sequence);
+                  // Get the cleaned sequence from the map
+                  const cleanSequence = cleanedSequences.get(sequence_index);
+                  if (!cleanSequence) {
+                    console.error("Clean sequence not found for index:", sequence_index);
+                    continue; // Skip if sequence not found
+                  }
                   const sequenceLength = cleanSequence.length;
                   
                   allCurrentResults.set(sequence_index, new Array(sequenceLength).fill(null).map((_, idx) => ({
@@ -121,6 +154,7 @@ export const POST: RequestHandler = async ({ request }) => {
                     saliency: 0,
                     confidence: 0,
                     activeWindows: [],
+                    activeDomains: [],
                     sequence_index,
                   })));
                 }
@@ -132,13 +166,14 @@ export const POST: RequestHandler = async ({ request }) => {
                   saliency: validSaliency,
                   confidence,
                   activeWindows: [],
+                  activeDomains: [],
                   sequence_index,
                 };
 
                 // Emit progress update with partial results
                 emit("message", JSON.stringify({
                   type: 'progress',
-                  sequence,
+                  sequence: sequenceList[sequence_index],
                   sequence_index,
                   partialResults: currentResults.map(res => ({
                     position: res.position,
@@ -163,12 +198,13 @@ export const POST: RequestHandler = async ({ request }) => {
                 
                 // Get existing results array if it exists
                 const currentResults = allCurrentResults.get(sequence_index);
-                if (currentResults) {  // Only process if we have already initialized results for this sequence
+                if (currentResults) {
                   // Update positions affected by this window
                   for (let pos = window.start; pos < window.end; pos++) {
                     if (!currentResults[pos].activeWindows) {
                       currentResults[pos].activeWindows = [];
                     }
+                    // Add window to affected positions
                     currentResults[pos].activeWindows.push(window);
                   }
 
@@ -186,6 +222,49 @@ export const POST: RequestHandler = async ({ request }) => {
                     })),
                   }));
                 }
+              } else if (resultData.type === 'sequence_start') {
+                console.log("SSE Event: sequence_start", resultData); // Log sequence_start
+                // Handle sequence_start event if needed in +server.ts
+              } else if (resultData.type === 'model_start') {
+                console.log("SSE Event: model_start", resultData); // Log model_start
+                // Handle model_start event if needed in +server.ts
+              } else if (resultData.type === 'domain_result') {
+                const { sequence_index, domains } = resultData;
+                const currentResults = allCurrentResults.get(sequence_index);
+                
+                if (currentResults) {
+                  // Update positions affected by domains
+                  domains.forEach(domain => {
+                    for (let pos = domain.start; pos <= domain.end; pos++) {
+                      if (!currentResults[pos].activeDomains) {
+                        currentResults[pos].activeDomains = [];
+                      }
+                      currentResults[pos].activeDomains.push(domain);
+                    }
+                  });
+
+                  // Emit progress update with domain information
+                  emit("message", JSON.stringify({
+                    type: 'domain_progress',
+                    sequence_index,
+                    domains,
+                    partialResults: currentResults.map(res => ({
+                      position: res.position,
+                      score: res.saliency,
+                      confidence: res.confidence,
+                      activeDomains: res.activeDomains,
+                    })),
+                  }));
+                }
+              } else if (resultData.type === 'sequence_prediction') {
+                emit("message", JSON.stringify({
+                  type: 'sequence_prediction',
+                  sequence_index: resultData.sequence_index,
+                  is_amyloid: resultData.is_amyloid,
+                  prediction_score: resultData.prediction_score,
+                  confidence: resultData.confidence,
+                  model_predictions: resultData.model_predictions
+                }));
               }
 
             } catch (e) {
@@ -209,6 +288,7 @@ export const POST: RequestHandler = async ({ request }) => {
             return;
           } else if (line.startsWith('event: error')) {
             const errorData = line.slice(13);
+            console.error("SSE Error Event Received:", errorData);
             emit("message", JSON.stringify({
               type: 'error',
               error: errorData

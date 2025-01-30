@@ -22,6 +22,15 @@
     shift: 'left' | 'right' | null;
   }
 
+  interface DomainResult {
+    start: number;
+    end: number;
+    peak_score: number;
+    mean_score: number;
+    confidence: number;
+    stability: number;
+  }
+
   export let sequence: string;
   export let results: PartialResult[] = [];
   export let isLoading = false;
@@ -53,7 +62,7 @@
   });
 
   // Calculate background color based on saliency score and confidence
-  function getScoreColor(score: number, confidence: number = 1): string {
+  function getScoreColor(score: number, confidence: number = 1, domains: DomainResult[] = []): string {
     // Ensure we have valid numbers
     if (score === undefined || score === null) return 'transparent';
     
@@ -88,7 +97,15 @@
     const minAlpha = 0.1;
     const adjustedAlpha = minAlpha + (alpha - minAlpha) * score;
     
-    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${adjustedAlpha})`;
+    const baseColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${adjustedAlpha})`;
+    const isDomainPosition = domains?.some(d => isPositionInDomain(position, d));
+    
+    if (isDomainPosition) {
+      // Enhance color for domain positions
+      return adjustColorIntensity(baseColor, 1.2);
+    }
+    
+    return baseColor;
   }
 
   // Calculate text color based on background color and confidence
@@ -97,7 +114,7 @@
     return brightness > 0.4 ? '#1a2b3b' : '#ffffff';
   }
 
-  // Track which cells were recently updated
+  // Track recent updates for animation
   let recentUpdates = new Set<number>();
   
   $: {
@@ -148,6 +165,33 @@
       shift 
     };
   }
+
+  // Track active scanning window
+  let activeScanWindow: WindowResult | null = null;
+  $: if (isLoading && results.some(r => r.activeWindows?.length)) {
+    // Find the most recent window
+    const lastWindowPos = results.findIndex(r => r.activeWindows?.length);
+    if (lastWindowPos >= 0) {
+      const windows = results[lastWindowPos].activeWindows || [];
+      activeScanWindow = windows[windows.length - 1];
+    }
+  } else {
+    activeScanWindow = null;
+  }
+
+  // Track active domain for hover effects
+  let hoveredDomain: DomainResult | null = null;
+
+  function isPositionInDomain(position: number, domain: DomainResult): boolean {
+    return position >= domain.start && position <= domain.end;
+  }
+
+  function getDomainHighlight(position: number): string {
+    if (!hoveredDomain) return 'transparent';
+    return isPositionInDomain(position, hoveredDomain)
+      ? 'rgba(42, 157, 143, 0.2)'
+      : 'transparent';
+  }
 </script>
 
 <div class="sequence-visualizer glass-panel" bind:this={container}>
@@ -160,7 +204,9 @@
           class="amino-cell"
           class:updated={recentUpdates.has(i)}
           class:processing={isLoading && (!result || result.confidence < 0.5)}
-          class:low-confidence={result?.confidence < 0.5}
+          class:in-active-window={activeScanWindow && 
+            i >= activeScanWindow.start && 
+            i < activeScanWindow.end}
           style="
             width: {cellSize}px;
             height: {cellSize}px;
@@ -243,6 +289,22 @@
                   {/if}
                 </div>
               </div>
+
+              {#if result.activeDomains?.length}
+                <div class="tooltip-section">
+                  <div class="metric">
+                    <span class="metric-label">Domain</span>
+                    <span class="metric-value">
+                      {#if hoveredDomain}
+                        {hoveredDomain.start + 1}-{hoveredDomain.end + 1}
+                        ({Math.round(hoveredDomain.confidence * 100)}% confidence)
+                      {:else}
+                        {result.activeDomains.length} detected
+                      {/if}
+                    </span>
+                  </div>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -252,6 +314,41 @@
       </div>
     {/each}
   </div>
+  
+  <!-- Add scanning window indicator -->
+  {#if activeScanWindow}
+    <div 
+      class="scan-window-indicator"
+      style="
+        left: {(activeScanWindow.start * cellSize)}px;
+        width: {((activeScanWindow.end - activeScanWindow.start) * cellSize)}px;
+      "
+      transition:fade
+    />
+  {/if}
+
+  <!-- Add domain indicators above sequence -->
+  {#if results.some(r => r.activeDomains?.length)}
+    <div class="domain-indicators">
+      {#each results.filter(r => r.activeDomains?.length) as result}
+        {#each result.activeDomains as domain}
+          <div 
+            class="domain-indicator"
+            style="
+              left: {(domain.start * cellSize)}px;
+              width: {((domain.end - domain.start + 1) * cellSize)}px;
+            "
+            on:mouseenter={() => hoveredDomain = domain}
+            on:mouseleave={() => hoveredDomain = null}
+          >
+            <div class="domain-label">
+              {Math.round(domain.confidence * 100)}% confident
+            </div>
+          </div>
+        {/each}
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style lang="scss">
@@ -466,5 +563,60 @@
     0% { transform: scale(1); }
     50% { transform: scale(1.1); }
     100% { transform: scale(1); }
+  }
+
+  .amino-cell.in-active-window {
+    box-shadow: inset 0 0 0 2px rgba(42, 157, 143, 0.5);
+  }
+  
+  .scan-window-indicator {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(42, 157, 143, 0.1);
+    border: 2px solid rgba(42, 157, 143, 0.3);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .domain-indicators {
+    position: relative;
+    height: 24px;
+    margin-bottom: 8px;
+  }
+
+  .domain-indicator {
+    position: absolute;
+    height: 4px;
+    background: rgba(42, 157, 143, 0.3);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(42, 157, 143, 0.5);
+      height: 6px;
+
+      .domain-label {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .domain-label {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(4px);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: all 0.2s ease;
+    }
   }
 </style> 

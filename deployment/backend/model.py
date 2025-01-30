@@ -33,6 +33,37 @@ class LitGRU(LightningModule):
         self.amyloid = amyloid
         self.save_hyperparameters(ignore=["lossFunc", "vocab"])
 
+    def get_hidden_states(self, text, text_len):
+        """Get both prediction and hidden states for analysis"""
+        # Get embeddings
+        text_emb = self.embedding(text)
+        
+        # Pack sequence for GRU
+        packed_input = pack_padded_sequence(
+            text_emb, text_len, batch_first=True, enforce_sorted=False
+        )
+        
+        # Run through GRU
+        packed_output, _ = self.gru(packed_input)
+        
+        # Unpack output
+        output, _ = pad_packed_sequence(packed_output, batch_first=True)
+        
+        # Get final hidden states for prediction
+        out_forward = output[range(len(output)), text_len - 1, :self.dimension]
+        out_reverse = output[:, 0, self.dimension:]
+        out_reduced = cat((out_forward, out_reverse), 1)
+        
+        # Get prediction
+        text_fea = self.dropOnOutput(out_reduced)
+        text_fea = self.fc(text_fea)
+        text_fea = squeeze(text_fea, 1)
+        text_out = sigmoid(text_fea)
+        
+        # Return both prediction and per-position hidden states
+        # output shape: [batch_size, seq_len, 2*hidden_size]
+        return text_out, output[0]  # Take first batch since we process one at a time
+
     def forward(self, text, text_len):
         text_emb = self.embedding(text)
         packed_input = pack_padded_sequence(
