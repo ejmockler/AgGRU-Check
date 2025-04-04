@@ -2,7 +2,9 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13147167.svg)](https://doi.org/10.5281/zenodo.13147167)
 
-Identify and visualize amyloidogenic domains in proteins using gated recurrent units. Try it live at [aggru-check.fly.dev](https://aggru-check.fly.dev)
+Identify and visualize amyloidogenic domains in proteins using gated recurrent units. Try it live at [aggru-check.fly.dev](https://aggru-check.fly.dev)!
+
+Read more about this model in [details.pdf](details.pdf).
 
 ## Overview
 
