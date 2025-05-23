@@ -20,7 +20,6 @@ AgGRU-Check uses an ensemble of bidirectional GRUs to predict and analyze amyloi
 
 ### Advanced Analysis
 - Multi-scale window analysis (15-27 residues)
-- Permutation-based significance testing
 - Ensemble prediction with confidence scoring
 - Position-specific saliency mapping
 
@@ -34,9 +33,8 @@ AgGRU-Check uses an ensemble of bidirectional GRUs to predict and analyze amyloi
 ### Input Support
 - Raw amino acid sequences
 - FASTA format with headers
-- FASTQ format
-- Multiple sequence analysis (up to 5)
-- Batch processing capability
+- Multiple sequence analysis
+- Batch processing with streaming results
 
 ## Project Structure
 
@@ -89,7 +87,7 @@ npm run dev
 
 ## API Usage
 
-The API accepts POST requests and streams results:
+The API accepts POST requests and streams real-time analysis results:
 
 ```bash
 curl -X POST https://aggru-check.fly.dev/api/predict \
@@ -97,11 +95,19 @@ curl -X POST https://aggru-check.fly.dev/api/predict \
   -d '{"sequenceList": [">TDP-43\nINPAMMAAA"]}'
 ```
 
-Response includes:
-- Position-specific scores
-- Window analysis results
-- Confidence measures
-- Model ensemble agreement
+The API streams results as Server-Sent Events (SSE) including:
+- Real-time position-specific scores
+- Per-model analysis progress
+- Ensemble agreement metrics
+- Position-specific confidence scores
+- Detailed window analysis results
+
+Example response events:
+```json
+{"type": "sequence_start", "sequence_index": 0, "total_models": 5}
+{"type": "position_result", "position": 10, "saliency": 0.85, "confidence": 0.92}
+{"type": "model_complete", "sequence_index": 0, "model_index": 1}
+```
 
 ## Training Data
 
@@ -117,13 +123,20 @@ Available at: [Gut Phage Database](https://datacommons.cyverse.org/browse/iplant
 - **Model Architecture**: 
   - Bidirectional GRU ensemble
   - Multi-scale window analysis
-  - Permutation-based significance testing
   
-- **Analysis Features**:
-  - Position-specific scoring
-  - Confidence calculation
-  - Window-based domain detection
-  - Ensemble agreement metrics
+- **Analysis Methodology**:
+  - **Adaptive Window Analysis**: Uses multiple window sizes (15, 21, 27 residues) to capture both local and broader structural patterns
+  - **Context-Aware Scoring**:
+    - For amyloid sequences: Identifies critical regions by masking windows and measuring prediction impact
+    - For non-amyloid sequences: Requires stronger evidence with higher thresholds for positive predictions
+  - **Position Scoring**:
+    - Gaussian weighting around window centers
+    - Nonlinear impact scaling to emphasize strong signals
+    - Conservative score aggregation using weighted max/mean combinations
+  - **Confidence Calculation**:
+    - Based on ensemble agreement and prediction variance
+    - Scales with number of models completed
+    - Incorporates standard deviation of predictions
 
 - **Stack**: 
   - Backend: PyTorch, FastAPI
